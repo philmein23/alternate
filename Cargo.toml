@@ -5,7 +5,7 @@ edition = "2024"
 description = "A native Mac writing app for trying different versions of a word, sentence or paragraph in place"
 
 [dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a7870a79272ee2523b592b1248d" }
+rune = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a7870a79272ee2523b592b1248d", features = ["native-file-dialog"] }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a7870a79272ee2523b592b1248d" }
 rune-fx = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a7870a79272ee2523b592b1248d" }
 rune-mac = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a7870a79272ee2523b592b1248d" }
