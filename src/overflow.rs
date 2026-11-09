@@ -81,11 +81,11 @@ impl State {
 
 /// Keys inside the Overflow field.
 pub fn field_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if ev.mods.ctrl && ev.key == Key::Enter {
+    if ev.mods.cmd && ev.key == Key::Enter {
         let at = s.edit.range().1;
         return s.use_overflow(at);
     }
-    if ev.mods.cmd && !ev.is_command('z') {
+    if ev.mods.cmd && !ev.is_command('z') && !ev.is_command('a') {
         return crate::editor::handle_key(s, ev, tx);
     }
     false

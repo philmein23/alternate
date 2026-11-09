@@ -2,7 +2,7 @@
 
 A native Mac writing app, built with Rune, for trying different versions of a word, sentence or paragraph in place.
 
-Write as usual. Click the word count to turn on the marks and tools. Press ⌃⇧A on a word to add alternatives, then rest the pointer on it and use the arrow keys to swap them on the page. Everything is saved in one Markdown file, with the alternatives in a hidden comment at the end.
+Write as usual. Click the word count to turn on the marks and tools. Press ⌘A on a word to add alternatives, then rest the pointer on it and use the arrow keys to swap them on the page. Everything is saved in one Markdown file, with the alternatives in a hidden comment at the end.
 
 ## Install
 

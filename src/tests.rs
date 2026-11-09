@@ -257,8 +257,10 @@ fn deleting_on_a_target_sets_off_a_burst_at_its_word() {
     assert!(rt.state.bursts[0].rect[2] > 20.0);
 }
 
-fn ctrl(key: &str, shift: bool) -> KeyEvent {
-    KeyEvent { key: Key::Text(key.to_string()), mods: Mods { ctrl: true, shift, ..Mods::default() } }
+fn chord(key: &str, shift: bool) -> KeyEvent {
+    let mut ev = cmd(key);
+    ev.mods.shift = shift;
+    ev
 }
 
 fn right_click(rt: &mut Runtime<State>, x: f32, y: f32) {
@@ -325,20 +327,20 @@ fn the_shortcuts_ghost_and_stash_at_the_caret() {
     click(&mut rt, "doc");
     rt.update(|s, _| s.edit.set_selection(5, 5));
     rt.frame(1.0 / 60.0);
-    rt.key(ctrl("/", false));
+    rt.key(chord("/", false));
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.state.doc.ghosts[0].range, 4..7);
-    rt.key(ctrl("/", false));
+    rt.key(chord("/", false));
     rt.frame(1.0 / 60.0);
     assert!(rt.state.doc.ghosts.is_empty());
-    rt.key(ctrl("X", true));
+    rt.key(chord("X", true));
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.state.edit.text, "one three");
     assert_eq!(rt.state.doc.overflow, "two");
 }
 
 #[test]
-fn ctrl_return_in_overflow_inserts_at_the_page_caret() {
+fn cmd_return_in_overflow_inserts_at_the_page_caret() {
     let mut rt = runtime(crate::marked_sample());
     rt.update(|s, _| {
         s.set_overflow("spare line".to_string());
@@ -348,7 +350,7 @@ fn ctrl_return_in_overflow_inserts_at_the_page_caret() {
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
     click(&mut rt, "overflow-field");
-    rt.key(KeyEvent { key: Key::Enter, mods: Mods { ctrl: true, ..Mods::default() } });
+    rt.key(KeyEvent { key: Key::Enter, mods: Mods { cmd: true, ..Mods::default() } });
     rt.frame(1.0 / 60.0);
     assert!(rt.state.edit.text.starts_with("spare line"), "{}", &rt.state.edit.text[..30]);
     assert_eq!(rt.state.edit.text, rt.state.doc.text);
@@ -661,7 +663,7 @@ fn visual_mode_extends_the_selection_and_escape_collapses_it() {
 #[test]
 fn shortcuts_still_work_in_normal_mode() {
     let mut rt = vim_runtime("one two", 1);
-    rt.key(ctrl("a", true));
+    rt.key(chord("a", false));
     rt.frame(1.0 / 60.0);
     assert!(rt.state.panel.is_some());
 }
@@ -676,4 +678,21 @@ fn g_jumps_scroll_the_page_to_the_caret() {
     settle(&mut rt);
     let down = rt.find("doc").unwrap().1;
     assert!(down < top - 500.0, "{top} -> {down}");
+}
+
+#[test]
+fn command_a_opens_alternatives_on_the_page_but_selects_within_a_row() {
+    let mut rt = runtime(State::with_doc(Doc::new("one two")));
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.edit.set_selection(1, 1));
+    rt.frame(1.0 / 60.0);
+    rt.key(chord("a", false));
+    settle(&mut rt);
+    let id = rt.state.panel.as_ref().unwrap().id;
+    click(&mut rt, "row-0");
+    rt.key(chord("a", false));
+    settle(&mut rt);
+    let panel = rt.state.panel.as_ref().unwrap();
+    assert_eq!(panel.id, id, "stays on the same word");
+    assert_eq!(panel.rows[0].range(), (0, panel.rows[0].text.len()));
 }

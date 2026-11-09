@@ -229,10 +229,14 @@ impl State {
 
 /// Keys inside a row.
 pub fn row_key(s: &mut State, i: usize, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if ev.mods.ctrl && ev.mods.shift && matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("g")) {
+    if ev.is_command('a') && ev.mods.shift {
         return s.ask_ai();
     }
     if ev.mods.cmd {
+        // ⌘A inside a row selects the row, as in any field.
+        if ev.is_command('a') {
+            return false;
+        }
         // Undo inside a row undoes the row's own typing.
         if ev.is_command('z') {
             return false;
