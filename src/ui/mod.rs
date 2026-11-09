@@ -1,4 +1,5 @@
 pub mod chrome;
+pub mod fx;
 pub mod marks;
 pub mod palette_scene;
 pub mod sidebar;

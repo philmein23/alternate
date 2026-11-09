@@ -9,6 +9,8 @@ use crate::article;
 use crate::editor::Mode;
 use crate::model::TargetId;
 use crate::rebase::Edit;
+use crate::sound::Tone;
+use crate::ui::fx::Burst;
 use crate::ui::theme;
 use crate::State;
 
@@ -128,10 +130,13 @@ pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         && matches!(ev.key, Key::Backspace | Key::Delete)
         && let Some(Hover { id, armed: true }) = s.hover
         && s.panel.is_none()
-        && s.delete_alt(id)
     {
-        tx.wake_after(Duration::ZERO);
-        return true;
+        let rect = s.hit.borrow().iter().find(|(i, _)| *i == id).and_then(|(_, b)| b.first().copied());
+        if s.delete_alt(id) {
+            s.bursts.extend(rect.map(|rect| Burst { rect, started: None }));
+            tx.wake_after(Duration::ZERO);
+            return true;
+        }
     }
     let dir = match &ev.key {
         Key::Left if plain => -1,
@@ -148,6 +153,8 @@ pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if !s.step_alt(id, dir) {
         return false;
     }
+    let back_to_original = s.doc.targets.iter().find(|t| t.id == id).is_some_and(|t| t.is_original(&s.doc.text));
+    s.sound.play(if back_to_original { Tone::Low } else { Tone::High });
     tx.wake_after(Duration::ZERO);
     true
 }

@@ -17,7 +17,8 @@ pub fn count(s: &State) -> El {
 }
 
 pub fn file_controls(s: &State) -> Option<El> {
-    (s.mode == Mode::Active).then(|| row().gap(16.0).child(control("Save", "save", |s, tx| s.save(tx))).child(control("Open", "open", |s, tx| s.open(tx))))
+    let sound = if s.sound.off { "Sound off" } else { "Sound on" };
+    (s.mode == Mode::Active).then(|| row().gap(16.0).child(control("Save", "save", |s, tx| s.save(tx))).child(control("Open", "open", |s, tx| s.open(tx))).child(control(sound, "toggle-sound", |s, _| s.sound.toggle())))
 }
 
 /// Hides the marks so the page can be read clean. The alternatives stay.

@@ -116,6 +116,7 @@ dependencies = [
  "rune-mac",
  "serde",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]

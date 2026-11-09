@@ -226,3 +226,24 @@ fn backspace_after_typing_deletes_text_even_on_a_target() {
     assert_eq!(rt.state.edit.text.len(), typed.len() - 1);
     assert_eq!(rt.state.doc.targets[0].alts.len(), 2, "the alternatives are safe");
 }
+
+#[test]
+fn rapid_arrows_play_every_tone_and_the_original_gets_the_low_one() {
+    use crate::sound::Tone;
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Right);
+    press(&mut rt, Key::Right);
+    assert_eq!(rt.state.sound.played, [Tone::High, Tone::Low]);
+}
+
+#[test]
+fn deleting_on_a_target_sets_off_a_burst_at_its_word() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Backspace);
+    assert_eq!(rt.state.bursts.len(), 1);
+    assert!(rt.state.bursts[0].rect[2] > 20.0);
+}

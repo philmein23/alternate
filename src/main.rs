@@ -12,6 +12,7 @@ mod rebase;
 #[allow(dead_code)]
 mod segment;
 mod sidebar;
+mod sound;
 mod swap;
 mod ui;
 mod undo;
@@ -47,6 +48,8 @@ pub struct State {
     /// Answers a stale row binding after the panel closes.
     pub spare_edit: TextEdit,
     pub history: undo::History,
+    pub sound: sound::Sound,
+    pub bursts: Vec<ui::fx::Burst>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -124,6 +127,9 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
     if let Some(marks) = ui::marks::overlay(s, cx) {
         grown = grown.child(marks);
     }
+    for slot in ui::fx::slots(s) {
+        grown = grown.child(slot);
+    }
     col().w_full().max_w(theme::COLUMN + theme::GUTTER * 2.0).px(theme::GUTTER).pt(72.0).pb(120.0).child(grown)
 }
 
@@ -155,7 +161,8 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
 
 fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     let fading = swap::poll(s, now, tx);
-    s.track_panel() || fading
+    let burning = ui::fx::poll(s, now, tx);
+    s.track_panel() || fading || burning
 }
 
 fn on_close(s: &mut State, _tx: &mut Tx) {
@@ -169,12 +176,17 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),
         poll: Some(poll),
+        setup: Some(|s, _| {
+            if let Some(dir) = editor::recovery_dir() {
+                s.sound = sound::Sound::load(&dir);
+            }
+        }),
         ..AppSpec::new(APP_NAME, rune_mac::saved_size(APP_NAME).unwrap_or((1200.0, 800.0)), State::new, view)
     };
-    rune::App::new(spec).chrome(Chrome { full_size_content: true, traffic_lights: Some((18.0, 16.0)), ..Chrome::DEFAULT }).on_close(on_close).run();
+    rune::App::new(spec).chrome(Chrome { full_size_content: true, traffic_lights: Some((18.0, 16.0)), ..Chrome::DEFAULT }).on_close(on_close).compositor(ui::fx::Gfx::default()).run();
 }
