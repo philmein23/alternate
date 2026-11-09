@@ -26,7 +26,7 @@ pub fn press<S: 'static>(rt: &mut Runtime<S>, key: Key) {
 
 #[test]
 fn typing_reaches_the_document() {
-    let mut rt = runtime(State { edit: rune::TextEdit::new("") });
+    let mut rt = runtime(State { edit: rune::TextEdit::new(""), scene: crate::Scene::App });
     click(&mut rt, "doc");
     press(&mut rt, Key::Text("a".to_string()));
     assert_eq!(rt.state.edit.text, "a");

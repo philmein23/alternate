@@ -5,6 +5,7 @@ mod fonts;
 mod model;
 #[allow(dead_code)]
 mod rebase;
+mod ui;
 
 #[cfg(test)]
 mod tests;
@@ -15,15 +16,26 @@ const APP_NAME: &str = "Alternate";
 
 pub struct State {
     pub edit: TextEdit,
+    pub scene: Scene,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scene {
+    #[default]
+    App,
+    Palette,
 }
 
 impl State {
     fn new() -> State {
-        State { edit: TextEdit::new("Start writing.") }
+        State { edit: TextEdit::new("Start writing."), scene: Scene::App }
     }
 }
 
 pub fn view(s: &State, _cx: &mut Cx<State>) -> El {
+    if s.scene == Scene::Palette {
+        return ui::palette_scene::view(s);
+    }
     let ink: Color = oklch(0.9, 0.03, 70.0);
     let title = text("Alternate".to_string()).font(TextStyle::new(24.0, 400.0).family(Family::Named(fonts::HAND))).color(oklch(0.7, 0.12, 285.0));
     let body = text_input(&s.edit, TextStyle::new(16.0, 400.0).lh(26.0).family(Family::Mono)).on_edit(|s: &mut State| &mut s.edit).key("doc").w_full().color(ink);
@@ -35,7 +47,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("empty", |_| {})],
+        scenes: &[("empty", |_| {}), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         ..AppSpec::new(APP_NAME, rune_mac::saved_size(APP_NAME).unwrap_or((1200.0, 800.0)), State::new, view)
