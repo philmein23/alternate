@@ -18,7 +18,8 @@ pub fn count(s: &State) -> El {
 
 pub fn file_controls(s: &State) -> Option<El> {
     let sound = if s.sound.off { "Sound off" } else { "Sound on" };
-    (s.mode == Mode::Active).then(|| row().gap(16.0).child(control("Save", "save", |s, tx| s.save(tx))).child(control("Open", "open", |s, tx| s.open(tx))).child(control("Post to X", "post-x", |s, tx| s.post_to_x(tx))).child(control(sound, "toggle-sound", |s, _| s.sound.toggle())).child(control("AI", "open-settings", |s, _| s.toggle_settings())))
+    let vim_label = if s.vim.on { "Vim on" } else { "Vim off" };
+    (s.mode == Mode::Active).then(|| row().gap(16.0).child(control("Save", "save", |s, tx| s.save(tx))).child(control("Open", "open", |s, tx| s.open(tx))).child(control(vim_label, "toggle-vim", |s, _| s.vim.toggle())).child(control("Post to X", "post-x", |s, tx| s.post_to_x(tx))).child(control(sound, "toggle-sound", |s, _| s.sound.toggle())).child(control("AI", "open-settings", |s, _| s.toggle_settings())))
 }
 
 /// Hides the marks so the page can be read clean. The alternatives stay.
@@ -30,6 +31,20 @@ pub fn marks_toggle(s: &State) -> Option<El> {
 pub fn overflow_toggle(s: &State) -> Option<El> {
     let color = if s.overflow_open { THEME.accent.color() } else { THEME.faint.color() };
     (s.mode == Mode::Active).then(|| text("Overflow".to_string()).font(theme::small()).color(color).key("toggle-overflow").on_press_tx(|s: &mut State, _| s.toggle_overflow()))
+}
+
+/// Which Vim mode the page is in. Shown even with the other controls hidden.
+pub fn vim_mode(s: &State) -> Option<El> {
+    use crate::vim::Mode as M;
+    if !s.vim.on {
+        return None;
+    }
+    let (label, color) = match s.vim.mode {
+        M::Insert => ("INSERT", THEME.faint.color()),
+        M::Normal => ("NORMAL", THEME.accent.color()),
+        M::Visual => ("VISUAL", THEME.accent.color()),
+    };
+    Some(text(label.to_string()).font(theme::small()).color(color).key("vim-mode"))
 }
 
 pub fn notice(s: &State) -> Option<El> {

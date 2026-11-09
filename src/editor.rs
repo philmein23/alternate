@@ -9,6 +9,7 @@ use crate::file::{self, Problem};
 use crate::model::Doc;
 use crate::shortcuts;
 use crate::swap;
+use crate::vim;
 use crate::{Scene, State};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -58,7 +59,7 @@ impl State {
         let edit = TextEdit::new(doc.text.clone());
         let overflow_edit = TextEdit::new(doc.overflow.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default(), review: None, help_open: false, dim: 0.0, dim_at: None, still: Default::default() }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default(), review: None, help_open: false, vim: Default::default(), dim: 0.0, dim_at: None, still: Default::default() }
     }
 
     /// Takes in the field after a change.
@@ -184,7 +185,7 @@ pub fn recovery_dir() -> Option<PathBuf> {
 
 /// Keys that act on the whole document. Runs before the field and when nothing is focused.
 pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if swap::handle_key(s, ev, tx) {
+    if vim::handle_key(s, ev, tx) || swap::handle_key(s, ev, tx) {
         return true;
     }
     shortcuts::find(ev).is_some_and(|action| shortcuts::run(s, action, tx))

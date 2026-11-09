@@ -3,7 +3,7 @@
 use rune::{El, Shape, Transition, canvas, col, row, text};
 
 use crate::State;
-use crate::shortcuts::{IN_PLACE, SHORTCUTS};
+use crate::shortcuts::{IN_PLACE, SHORTCUTS, VIM};
 use crate::ui::theme::{self, THEME};
 
 fn icon(on: bool) -> El {
@@ -32,6 +32,7 @@ pub fn view(s: &State) -> Option<El> {
     if s.help_open {
         let card = SHORTCUTS.iter().fold(col().w(320.0).fill(THEME.panel.color()).radius(10.0).padding(16.0).gap(6.0).key("help"), |c, k| c.child(line(k.keys, k.does)));
         let card = IN_PLACE.iter().fold(card, |c, (keys, does)| c.child(line(keys, does)));
+        let card = if s.vim.on { VIM.iter().fold(card, |c, (keys, does)| c.child(line(keys, does))) } else { card };
         column = column.child(card.transition(Transition::opacity()));
     }
     Some(column.pin(None, Some(0.0), Some(0.0), None))

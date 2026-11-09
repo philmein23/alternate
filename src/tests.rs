@@ -547,6 +547,28 @@ fn an_empty_first_launch_shows_where_to_start() {
     assert!(rt.find("first-hint").is_some());
 }
 
+fn typed(rt: &mut Runtime<State>, keys: &str) {
+    for c in keys.chars() {
+        press(rt, Key::Text(c.to_string()));
+    }
+    settle(rt);
+}
+
+fn vim_runtime(text: &str, at: usize) -> Runtime<State> {
+    let mut rt = runtime(State::with_doc(Doc::new(text)));
+    rt.update(|s, _| {
+        s.mode = Mode::Active;
+        s.vim.on = true;
+        s.edit.focused = true;
+        s.edit.set_selection(at, at);
+    });
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.edit.set_selection(at, at));
+    rt.frame(1.0 / 60.0);
+    press(&mut rt, Key::Escape);
+    rt
+}
+
 #[test]
 fn return_breaks_the_line_and_undoes_in_step_with_the_lists() {
     let mut rt = runtime(State::with_doc(Doc::new("one two")));
@@ -574,4 +596,84 @@ fn return_breaks_the_line_in_overflow_too() {
     click(&mut rt, "overflow-field");
     press(&mut rt, Key::Enter);
     assert!(rt.state.doc.overflow.contains('\n'), "{:?}", rt.state.doc.overflow);
+}
+
+#[test]
+fn normal_mode_moves_and_never_types() {
+    let mut rt = vim_runtime("one two three\n\nnext", 0);
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal);
+    typed(&mut rt, "w");
+    assert_eq!(rt.state.edit.focus, 4);
+    typed(&mut rt, "2l");
+    assert_eq!(rt.state.edit.focus, 6);
+    typed(&mut rt, "b");
+    assert_eq!(rt.state.edit.focus, 4);
+    typed(&mut rt, "G");
+    assert_eq!(rt.state.edit.focus, rt.state.edit.text.len());
+    typed(&mut rt, "gg");
+    assert_eq!(rt.state.edit.focus, 0);
+    typed(&mut rt, "}");
+    assert_eq!(rt.state.edit.focus, 14);
+    typed(&mut rt, "zqxd");
+    assert_eq!(rt.state.edit.text, "one two three\n\nnext");
+}
+
+#[test]
+fn j_and_k_move_by_wrapped_lines_not_paragraphs() {
+    let long = "word ".repeat(120);
+    let mut rt = vim_runtime(&long, 0);
+    typed(&mut rt, "j");
+    let line = rt.state.edit.focus;
+    assert!(line > 0 && line < 120, "{line}");
+    typed(&mut rt, "k");
+    assert_eq!(rt.state.edit.focus, 0);
+}
+
+#[test]
+fn i_a_and_o_return_to_typing() {
+    let mut rt = vim_runtime("one\ntwo", 0);
+    typed(&mut rt, "o");
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Insert);
+    assert_eq!(rt.state.edit.text, "one\n\ntwo");
+    assert_eq!(rt.state.edit.focus, 4);
+    typed(&mut rt, "x");
+    assert_eq!(rt.state.edit.text, "one\nx\ntwo");
+    assert_eq!(rt.state.doc.text, rt.state.edit.text);
+    press(&mut rt, Key::Escape);
+    typed(&mut rt, "a");
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Insert);
+    assert_eq!(rt.state.edit.focus, 5);
+}
+
+#[test]
+fn visual_mode_extends_the_selection_and_escape_collapses_it() {
+    let mut rt = vim_runtime("one two three", 0);
+    typed(&mut rt, "v");
+    typed(&mut rt, "w");
+    assert_eq!(rt.state.edit.range(), (0, 4));
+    typed(&mut rt, "e");
+    assert_eq!(rt.state.edit.range(), (0, 7));
+    press(&mut rt, Key::Escape);
+    assert_eq!(rt.state.edit.range(), (7, 7));
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal);
+}
+
+#[test]
+fn shortcuts_still_work_in_normal_mode() {
+    let mut rt = vim_runtime("one two", 1);
+    rt.key(ctrl("a", true));
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.panel.is_some());
+}
+
+#[test]
+fn g_jumps_scroll_the_page_to_the_caret() {
+    let long = "A line of writing here.\n\n".repeat(200);
+    let mut rt = vim_runtime(&long, 0);
+    settle(&mut rt);
+    let top = rt.find("doc").unwrap().1;
+    typed(&mut rt, "G");
+    settle(&mut rt);
+    let down = rt.find("doc").unwrap().1;
+    assert!(down < top - 500.0, "{top} -> {down}");
 }

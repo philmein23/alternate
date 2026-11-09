@@ -18,6 +18,7 @@ mod sound;
 mod swap;
 mod ui;
 mod undo;
+mod vim;
 
 #[cfg(test)]
 mod tests;
@@ -66,6 +67,7 @@ pub struct State {
     pub lab: lab::Lab,
     pub review: Option<lab::trim::Review>,
     pub help_open: bool,
+    pub vim: vim::Vim,
     /// How dimmed the page is, from 0 to 1.
     pub dim: f32,
     dim_at: Option<f64>,
@@ -209,6 +211,9 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     if let Some(notice) = ui::chrome::notice(s) {
         bottom = bottom.child(notice);
     }
+    if let Some(mode) = ui::chrome::vim_mode(s) {
+        bottom = bottom.child(mode);
+    }
     bottom = bottom.child(row().grow(1.0));
     if let Some(toggle) = ui::chrome::overflow_toggle(s) {
         bottom = bottom.child(toggle);
@@ -294,6 +299,7 @@ fn main() {
         setup: Some(|s, _| {
             if let Some(dir) = editor::recovery_dir() {
                 s.sound = sound::Sound::load(&dir);
+                s.vim = vim::Vim::load(&dir);
             }
         }),
         ..AppSpec::new(APP_NAME, rune_mac::saved_size(APP_NAME).unwrap_or((1200.0, 800.0)), State::new, view)
