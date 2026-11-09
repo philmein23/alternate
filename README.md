@@ -14,7 +14,7 @@ Click **Vim off** at the bottom of the window to turn it on. The app still start
 scripts/install
 ```
 
-This builds a release, signs it, and puts it in `~/Applications`. It needs the patched Rune checkout named in `Cargo.toml`.
+This builds a release, signs it, and puts it in `~/Applications`. Cargo fetches Rune from a [fork](https://github.com/philmein23/rune) that adds two small text APIs.
 
 ## AI
 
