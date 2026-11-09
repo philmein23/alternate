@@ -44,7 +44,18 @@ pub const SHORTCUTS: &[Shortcut] = &[
 
 /// Keys that depend on where the pointer or focus is, so they're handled where they apply.
 /// Shown in the help while Vim motions are on.
-pub const VIM: &[(&str, &str)] = &[("Esc", "Normal mode"), ("h j k l", "Move"), ("w b e", "By word"), ("0 $", "Line start, line end"), ("{ }", "By paragraph"), ("gg G", "Top, bottom"), ("v", "Select with motions"), ("i a o", "Back to typing")];
+pub const VIM: &[(&str, &str)] = &[
+    ("Esc", "Normal mode"),
+    ("h j k l w b e", "Move"),
+    ("0 $ { } ( ) gg G", "Jump"),
+    ("f t / ? n * %", "Find"),
+    ("d c y > gu gU", "Then a motion, or iw ap i\" a("),
+    ("x r p P J ~", "Edit"),
+    ("u \u{2303}R .", "Undo, redo, repeat"),
+    ("v V", "Select"),
+    ("i a o R", "Typing"),
+    (": q @ m \"", "Commands, macros, marks, registers"),
+];
 
 pub const IN_PLACE: &[(&str, &str)] = &[("\u{2190} \u{2192}", "Swap, with the pointer on a marked word"), ("\u{232b}", "Delete that alternative"), ("\u{2318}\u{23ce}", "Use Overflow text, from Overflow"), ("??", "Ask Claude, in the empty row")];
 

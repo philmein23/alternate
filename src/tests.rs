@@ -549,11 +549,36 @@ fn an_empty_first_launch_shows_where_to_start() {
     assert!(rt.find("first-hint").is_some());
 }
 
+/// Types Vim keys. `<esc>`, `<cr>`, `<bs>` and `<c-r>` stand for those keys.
 fn typed(rt: &mut Runtime<State>, keys: &str) {
-    for c in keys.chars() {
-        press(rt, Key::Text(c.to_string()));
+    let mut rest = keys;
+    while let Some(c) = rest.chars().next() {
+        let special = ["<esc>", "<cr>", "<bs>", "<c-r>"].into_iter().find(|n| rest.starts_with(n));
+        match special {
+            Some(name) => {
+                let ev = match name {
+                    "<esc>" => KeyEvent { key: Key::Escape, mods: Mods::default() },
+                    "<cr>" => KeyEvent { key: Key::Enter, mods: Mods::default() },
+                    "<bs>" => KeyEvent { key: Key::Backspace, mods: Mods::default() },
+                    _ => KeyEvent { key: Key::Text("r".to_string()), mods: Mods { ctrl: true, ..Mods::default() } },
+                };
+                rt.key(ev);
+                rest = &rest[name.len()..];
+            }
+            None => {
+                rt.key(KeyEvent { key: Key::Text(c.to_string()), mods: Mods::default() });
+                rest = &rest[c.len_utf8()..];
+            }
+        }
+        rt.frame(1.0 / 60.0);
+        let mut frames = 0;
+        while rt.state.vim.busy() && frames < 5000 {
+            rt.frame(1.0 / 60.0);
+            frames += 1;
+        }
+        assert!(frames < 5000, "the repeat never finished");
     }
-    settle(rt);
+    rt.frame(1.0 / 60.0);
 }
 
 fn vim_runtime(text: &str, at: usize) -> Runtime<State> {
@@ -562,13 +587,22 @@ fn vim_runtime(text: &str, at: usize) -> Runtime<State> {
         s.mode = Mode::Active;
         s.vim.on = true;
         s.edit.focused = true;
-        s.edit.set_selection(at, at);
     });
     click(&mut rt, "doc");
-    rt.update(|s, _| s.edit.set_selection(at, at));
+    rt.update(|s, _| s.edit.set_selection(0, 0));
     rt.frame(1.0 / 60.0);
     press(&mut rt, Key::Escape);
+    rt.update(|s, _| s.edit.set_selection(at, at));
+    rt.frame(1.0 / 60.0);
     rt
+}
+
+/// Runs keys from a cursor position and returns the text and where the cursor ended.
+fn vim_result(text: &str, at: usize, keys: &str) -> (String, usize) {
+    let mut rt = vim_runtime(text, at);
+    typed(&mut rt, keys);
+    assert_eq!(rt.state.doc.text, rt.state.edit.text, "page and document agree");
+    (rt.state.edit.text.clone(), rt.state.edit.focus)
 }
 
 #[test]
@@ -601,6 +635,23 @@ fn return_breaks_the_line_in_overflow_too() {
 }
 
 #[test]
+fn command_a_opens_alternatives_on_the_page_but_selects_within_a_row() {
+    let mut rt = runtime(State::with_doc(Doc::new("one two")));
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.edit.set_selection(1, 1));
+    rt.frame(1.0 / 60.0);
+    rt.key(chord("a", false));
+    settle(&mut rt);
+    let id = rt.state.panel.as_ref().unwrap().id;
+    click(&mut rt, "row-0");
+    rt.key(chord("a", false));
+    settle(&mut rt);
+    let panel = rt.state.panel.as_ref().unwrap();
+    assert_eq!(panel.id, id, "stays on the same word");
+    assert_eq!(panel.rows[0].range(), (0, panel.rows[0].text.len()));
+}
+
+#[test]
 fn normal_mode_moves_and_never_types() {
     let mut rt = vim_runtime("one two three\n\nnext", 0);
     assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal);
@@ -610,13 +661,19 @@ fn normal_mode_moves_and_never_types() {
     assert_eq!(rt.state.edit.focus, 6);
     typed(&mut rt, "b");
     assert_eq!(rt.state.edit.focus, 4);
+    typed(&mut rt, "e");
+    assert_eq!(rt.state.edit.focus, 6);
+    typed(&mut rt, "$");
+    assert_eq!(rt.state.edit.focus, 12);
+    typed(&mut rt, "0");
+    assert_eq!(rt.state.edit.focus, 0);
     typed(&mut rt, "G");
-    assert_eq!(rt.state.edit.focus, rt.state.edit.text.len());
+    assert_eq!(rt.state.edit.focus, 15);
     typed(&mut rt, "gg");
     assert_eq!(rt.state.edit.focus, 0);
     typed(&mut rt, "}");
     assert_eq!(rt.state.edit.focus, 14);
-    typed(&mut rt, "zqxd");
+    typed(&mut rt, "ZQ\\");
     assert_eq!(rt.state.edit.text, "one two three\n\nnext");
 }
 
@@ -632,32 +689,253 @@ fn j_and_k_move_by_wrapped_lines_not_paragraphs() {
 }
 
 #[test]
-fn i_a_and_o_return_to_typing() {
-    let mut rt = vim_runtime("one\ntwo", 0);
-    typed(&mut rt, "o");
-    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Insert);
-    assert_eq!(rt.state.edit.text, "one\n\ntwo");
-    assert_eq!(rt.state.edit.focus, 4);
-    typed(&mut rt, "x");
-    assert_eq!(rt.state.edit.text, "one\nx\ntwo");
-    assert_eq!(rt.state.doc.text, rt.state.edit.text);
-    press(&mut rt, Key::Escape);
-    typed(&mut rt, "a");
-    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Insert);
-    assert_eq!(rt.state.edit.focus, 5);
+fn delete_operators() {
+    assert_eq!(vim_result("one two three", 0, "dw").0, "two three");
+    assert_eq!(vim_result("one two three", 0, "2dw").0, "three");
+    assert_eq!(vim_result("one two three", 0, "d2w").0, "three");
+    assert_eq!(vim_result("one two three", 0, "de").0, " two three");
+    assert_eq!(vim_result("one two three", 4, "d$").0, "one ");
+    assert_eq!(vim_result("one two three", 4, "D").0, "one ");
+    assert_eq!(vim_result("one two three", 4, "d0").0, "two three");
+    assert_eq!(vim_result("one two three", 0, "dtq").0, "one two three", "nothing to find, no change");
+    assert_eq!(vim_result("one two three", 0, "dtt").0, "two three");
+    assert_eq!(vim_result("one two three", 0, "dft").0, "wo three");
+    assert_eq!(vim_result("one two\nthree", 4, "dw").0, "one \nthree");
 }
 
 #[test]
-fn visual_mode_extends_the_selection_and_escape_collapses_it() {
-    let mut rt = vim_runtime("one two three", 0);
-    typed(&mut rt, "v");
-    typed(&mut rt, "w");
-    assert_eq!(rt.state.edit.range(), (0, 4));
-    typed(&mut rt, "e");
-    assert_eq!(rt.state.edit.range(), (0, 7));
-    press(&mut rt, Key::Escape);
-    assert_eq!(rt.state.edit.range(), (7, 7));
-    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal);
+fn line_operators() {
+    let t = "first\nsecond\nthird";
+    assert_eq!(vim_result(t, 0, "dd"), ("second\nthird".to_string(), 0));
+    assert_eq!(vim_result(t, 0, "2dd").0, "third");
+    assert_eq!(vim_result(t, 7, "dj").0, "first");
+    assert_eq!(vim_result(t, 7, "dk").0, "third");
+    assert_eq!(vim_result(t, 14, "dd").0, "first\nsecond");
+    assert_eq!(vim_result(t, 7, "dG").0, "first");
+    assert_eq!(vim_result(t, 7, "dgg").0, "third");
+    assert_eq!(vim_result(t, 0, "cchello<esc>").0, "hello\nsecond\nthird");
+    assert_eq!(vim_result(t, 0, "yyp").0, "first\nfirst\nsecond\nthird");
+    assert_eq!(vim_result(t, 7, "yyP").0, "first\nsecond\nsecond\nthird");
+    assert_eq!(vim_result(t, 0, ">>").0, "    first\nsecond\nthird");
+    assert_eq!(vim_result("    first", 4, "<<").0, "first");
+}
+
+#[test]
+fn change_goes_to_insert_and_cw_keeps_the_space() {
+    let (text, at) = vim_result("one two", 0, "cwhey<esc>");
+    assert_eq!(text, "hey two");
+    assert_eq!(at, 2, "Escape steps back onto the last letter");
+    assert_eq!(vim_result("one two", 4, "Cend<esc>").0, "one end");
+    assert_eq!(vim_result("one two", 0, "sO<esc>").0, "One two");
+    assert_eq!(vim_result("a\nb", 2, "SX<esc>").0, "a\nX");
+}
+
+#[test]
+fn single_key_edits() {
+    assert_eq!(vim_result("abc", 0, "x"), ("bc".to_string(), 0));
+    assert_eq!(vim_result("abc", 0, "2x").0, "c");
+    assert_eq!(vim_result("abc", 2, "X").0, "ac");
+    assert_eq!(vim_result("abc", 2, "x"), ("ab".to_string(), 1));
+    assert_eq!(vim_result("abc", 0, "rZ").0, "Zbc");
+    assert_eq!(vim_result("abc", 0, "2rZ").0, "ZZc");
+    assert_eq!(vim_result("abc", 0, "~").0, "Abc");
+    assert_eq!(vim_result("abc", 0, "3~").0, "ABC");
+    assert_eq!(vim_result("one\n  two", 0, "J").0, "one two");
+    assert_eq!(vim_result("abc", 0, "RXY<esc>").0, "XYc");
+}
+
+#[test]
+fn case_operators() {
+    assert_eq!(vim_result("one two", 0, "gUw").0, "ONE two");
+    assert_eq!(vim_result("ONE TWO", 0, "guw").0, "one TWO");
+    assert_eq!(vim_result("One", 0, "g~w").0, "oNE");
+    assert_eq!(vim_result("one two", 2, "gUU").0, "ONE TWO");
+    assert_eq!(vim_result("one two", 2, "gUiw").0, "ONE two");
+}
+
+#[test]
+fn text_objects_with_operators() {
+    assert_eq!(vim_result("one two three", 5, "diw").0, "one  three");
+    assert_eq!(vim_result("one two three", 5, "daw").0, "one three");
+    assert_eq!(vim_result("one two three", 5, "ciwX<esc>").0, "one X three");
+    assert_eq!(vim_result("say \"hello\" now", 6, "di\"").0, "say \"\" now");
+    assert_eq!(vim_result("call (a, b) now", 7, "ci(x<esc>").0, "call (x) now");
+    assert_eq!(vim_result("call (a) now", 6, "da(").0, "call  now");
+    assert_eq!(vim_result("One here. Two there. Three.", 12, "dis").0, "One here.  Three.");
+    assert_eq!(vim_result("one\nmore\n\nnext", 1, "dip").0, "\nnext");
+    assert_eq!(vim_result("one\nmore\n\nnext", 1, "dap").0, "next");
+}
+
+#[test]
+fn registers_keep_what_was_cut_and_yanked() {
+    assert_eq!(vim_result("one two", 0, "dwp").0, "tone wo");
+    assert_eq!(vim_result("one two", 0, "ywP").0, "one one two");
+    assert_eq!(vim_result("one two", 0, "\"ayw$\"ap").0, "one twoone ");
+    assert_eq!(vim_result("one two", 0, "\"_dwp").0, "two", "the black hole keeps nothing");
+    assert_eq!(vim_result("ab", 0, "yl3p").0, "aaaab");
+}
+
+#[test]
+fn undo_and_redo() {
+    assert_eq!(vim_result("one two", 0, "dwu").0, "one two");
+    assert_eq!(vim_result("one two", 0, "dwu<c-r>").0, "two");
+    assert_eq!(vim_result("one two three", 0, "dwdwuu").0, "one two three");
+}
+
+#[test]
+fn dot_repeats_the_last_change() {
+    assert_eq!(vim_result("a b c d", 0, "dw.").0, "c d");
+    assert_eq!(vim_result("a b c d", 0, "dw2.").0, "d");
+    assert_eq!(vim_result("one two three", 0, "cwX<esc>w.").0, "X X three");
+    assert_eq!(vim_result("ab\ncd", 0, "Ax<esc>j.").0, "abx\ncdx");
+    assert_eq!(vim_result("a b c d", 0, "dww.").0, "b d", "a motion in between doesn't replace it");
+}
+
+#[test]
+fn macros_record_and_replay() {
+    assert_eq!(vim_result("a\nb\nc", 0, "qqAx<esc>+q@q@@").0, "ax\nbx\ncx");
+    assert_eq!(vim_result("a\nb\nc\nd", 0, "qaAx<esc>+q2@a").0, "ax\nbx\ncx\nd");
+}
+
+#[test]
+fn a_long_macro_stops_at_its_limit_without_crashing() {
+    let (text, _) = vim_result(&"ab ".repeat(30), 0, "qqx lq9999@q");
+    assert!(text.len() < 90);
+}
+
+#[test]
+fn marks_are_motions() {
+    assert_eq!(vim_result("one two three", 4, "ma$`a").1, 4);
+    assert_eq!(vim_result("one two three", 4, "ma0d`a").0, "two three");
+    assert_eq!(vim_result("one\ntwo", 5, "ma0k'a").1, 4);
+}
+
+#[test]
+fn search_jumps_and_repeats() {
+    let t = "fog on the fog and fog";
+    assert_eq!(vim_result(t, 0, "/fog<cr>").1, 11);
+    assert_eq!(vim_result(t, 0, "/fog<cr>n").1, 19);
+    assert_eq!(vim_result(t, 0, "/fog<cr>nn").1, 0, "wraps");
+    assert_eq!(vim_result(t, 0, "/fog<cr>N").1, 0);
+    assert_eq!(vim_result(t, 11, "?fog<cr>").1, 0);
+    assert_eq!(vim_result(t, 0, "*").1, 11);
+    assert_eq!(vim_result(t, 11, "#").1, 0);
+    assert_eq!(vim_result(t, 0, "d/the<cr>").0, "the fog and fog");
+    assert_eq!(vim_result(t, 0, "/nope<esc>x").0, "og on the fog and fog", "cancelled");
+}
+
+#[test]
+fn colon_commands() {
+    assert_eq!(vim_result("a\nb\nc", 0, ":3<cr>").1, 4);
+    assert_eq!(vim_result("a a\na a", 0, ":s/a/b/<cr>").0, "b a\na a");
+    assert_eq!(vim_result("a a\na a", 0, ":s/a/b/g<cr>").0, "b b\na a");
+    assert_eq!(vim_result("a a\na a", 0, ":%s/a/b/g<cr>").0, "b b\nb b");
+    let mut rt = vim_runtime("a a", 0);
+    typed(&mut rt, ":%s/a/b/g<cr>u");
+    assert_eq!(rt.state.edit.text, "a a", "one undo step");
+    typed(&mut rt, ":nonsense<cr>");
+    assert!(rt.state.file.notice.as_ref().unwrap().contains("nonsense"));
+}
+
+#[test]
+fn quitting_with_unsaved_changes_is_refused() {
+    let mut rt = vim_runtime("a", 0);
+    typed(&mut rt, "x:q<cr>");
+    assert!(rt.state.file.notice.as_ref().unwrap().contains("Unsaved"));
+}
+
+#[test]
+fn substitute_keeps_a_marked_word_in_place() {
+    let mut rt = vim_runtime("aa bb cc", 0);
+    rt.update(|s, _| {
+        let id = s.doc.next_id();
+        s.doc.targets.push(crate::model::Target { id, range: 6..8, level: crate::model::Level::Word, original: "cc".into(), alts: vec![crate::model::Alt { text: "cc".into(), source: crate::model::Source::Mine }, crate::model::Alt { text: "dd".into(), source: crate::model::Source::Mine }], active: 0 });
+    });
+    typed(&mut rt, ":%s/aa/longer/<cr>");
+    let t = &rt.state.doc.targets[0];
+    assert_eq!(&rt.state.doc.text[t.range.clone()], "cc");
+}
+
+#[test]
+fn deleting_a_line_keeps_marked_words_after_it_in_place() {
+    let mut rt = vim_runtime("one\nmarked word", 0);
+    rt.update(|s, _| {
+        let id = s.doc.next_id();
+        s.doc.targets.push(crate::model::Target { id, range: 4..10, level: crate::model::Level::Word, original: "marked".into(), alts: vec![crate::model::Alt { text: "marked".into(), source: crate::model::Source::Mine }, crate::model::Alt { text: "noted".into(), source: crate::model::Source::Mine }], active: 0 });
+    });
+    typed(&mut rt, "dd");
+    let t = &rt.state.doc.targets[0];
+    assert_eq!(&rt.state.doc.text[t.range.clone()], "marked");
+    typed(&mut rt, "u");
+    let t = &rt.state.doc.targets[0];
+    assert_eq!(&rt.state.doc.text[t.range.clone()], "marked");
+}
+
+#[test]
+fn visual_mode_selects_and_operates() {
+    assert_eq!(vim_result("one two three", 0, "vld").0, "e two three");
+    assert_eq!(vim_result("one two three", 0, "vey").1, 0);
+    assert_eq!(vim_result("one two three", 4, "viwd").0, "one  three");
+    assert_eq!(vim_result("one two three", 4, "viwU").0, "one TWO three");
+    assert_eq!(vim_result("one two three", 0, "vecX<esc>").0, "X two three");
+    assert_eq!(vim_result("one\ntwo\nthree", 0, "Vjd").0, "three");
+    assert_eq!(vim_result("one\ntwo", 0, "Vyp").0, "one\none\ntwo");
+    assert_eq!(vim_result("one two", 0, "yiwwviwp").0, "one one");
+    assert_eq!(vim_result("one two three", 4, "velod").0, "one three");
+}
+
+#[test]
+fn visual_highlights_the_character_under_the_cursor_too() {
+    let mut rt = vim_runtime("one two", 0);
+    typed(&mut rt, "vl");
+    assert_eq!(crate::vim::highlights(&rt.state).len(), 2);
+    typed(&mut rt, "<esc>");
+    assert_eq!(rt.state.vim.status(), "NORMAL");
+    assert!(crate::vim::block_visible(&rt.state));
+}
+
+#[test]
+fn a_command_chord_acts_on_the_visual_selection() {
+    let mut rt = vim_runtime("one two three", 4);
+    typed(&mut rt, "ve");
+    rt.key(chord("a", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.range(), (4, 7));
+    assert!(rt.state.panel.is_some());
+}
+
+#[test]
+fn insert_entries() {
+    assert_eq!(vim_result("abc", 1, "iX<esc>").0, "aXbc");
+    assert_eq!(vim_result("abc", 1, "aX<esc>").0, "abXc");
+    assert_eq!(vim_result("  abc", 4, "IX<esc>").0, "  Xabc");
+    assert_eq!(vim_result("abc\nd", 0, "AX<esc>").0, "abcX\nd");
+    assert_eq!(vim_result("one\ntwo", 0, "oX<esc>").0, "one\nX\ntwo");
+    assert_eq!(vim_result("one\ntwo", 4, "OX<esc>").0, "one\nX\ntwo");
+}
+
+#[test]
+fn escape_cancels_a_half_typed_command() {
+    assert_eq!(vim_result("one two", 0, "d<esc>x").0, "ne two");
+    assert_eq!(vim_result("one two", 0, "3<esc>x").0, "ne two");
+}
+
+#[test]
+fn commands_are_safe_on_an_empty_page() {
+    for keys in ["x", "dd", "dw", "D", "p", "J", "G", "gg", "$", "w", "b", "e", "~", "rx", "yy", ".", "u", "*", "n", "viwd", "Vd", "diw", "da(", "dip", ":3<cr>", ":%s/a/b/<cr>"] {
+        assert_eq!(vim_result("", 0, keys).0, "", "{keys}");
+    }
+}
+
+#[test]
+fn commands_are_safe_on_awkward_text() {
+    let text = "\u{1f600} caf\u{e9}\n\n\u{5e9}\u{5dc} (x\n";
+    for keys in ["x", "2x", "dd", "dw", "de", "D", "J", "~", "ra", "yyp", "viwd", "Vd", "diw", "daw", "dip", "dap", "da(", "gUU", "Gdd", "$x", "ex", "wx"] {
+        for at in text.char_indices().map(|(i, _)| i) {
+            let (out, caret) = vim_result(text, at, keys);
+            assert!(out.is_char_boundary(caret.min(out.len())), "{keys} at {at}");
+        }
+    }
 }
 
 #[test]
@@ -681,18 +959,23 @@ fn g_jumps_scroll_the_page_to_the_caret() {
 }
 
 #[test]
-fn command_a_opens_alternatives_on_the_page_but_selects_within_a_row() {
-    let mut rt = runtime(State::with_doc(Doc::new("one two")));
-    click(&mut rt, "doc");
-    rt.update(|s, _| s.edit.set_selection(1, 1));
-    rt.frame(1.0 / 60.0);
-    rt.key(chord("a", false));
+fn escape_stops_a_repeat_and_other_typing_waits() {
+    let mut rt = vim_runtime(&"ab ".repeat(30), 0);
+    typed(&mut rt, "qqxq");
+    let before = rt.state.edit.text.len();
+    rt.key(KeyEvent { key: Key::Text("5".to_string()), mods: Mods::default() });
+    rt.key(KeyEvent { key: Key::Text("0".to_string()), mods: Mods::default() });
+    rt.key(KeyEvent { key: Key::Text("@".to_string()), mods: Mods::default() });
+    rt.key(KeyEvent { key: Key::Text("q".to_string()), mods: Mods::default() });
+    for _ in 0..4 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(rt.state.vim.busy());
+    rt.key(KeyEvent { key: Key::Text("i".to_string()), mods: Mods::default() });
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal, "typing during a repeat is ignored");
+    rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     settle(&mut rt);
-    let id = rt.state.panel.as_ref().unwrap().id;
-    click(&mut rt, "row-0");
-    rt.key(chord("a", false));
-    settle(&mut rt);
-    let panel = rt.state.panel.as_ref().unwrap();
-    assert_eq!(panel.id, id, "stays on the same word");
-    assert_eq!(panel.rows[0].range(), (0, panel.rows[0].text.len()));
+    assert!(!rt.state.vim.busy());
+    let left = rt.state.edit.text.len();
+    assert!(left < before && left > before - 50, "{before} -> {left}");
 }

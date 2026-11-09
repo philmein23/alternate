@@ -64,7 +64,8 @@ impl State {
 
     /// Takes in the field after a change.
     pub fn sync_field(&mut self) {
-        if self.doc.sync_text(&self.edit.text, Some(self.edit.focus)).is_some() {
+        if let Some(edit) = self.doc.sync_text(&self.edit.text, Some(self.edit.focus)) {
+            self.vim.rebase_marks(edit);
             self.history.clear_redo();
             self.touch();
         }

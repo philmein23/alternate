@@ -20,7 +20,7 @@ fn icon(on: bool) -> El {
 }
 
 fn line(keys: &str, does: &str) -> El {
-    row().w_full().gap(12.0).child(text(keys.to_string()).font(theme::small()).color(THEME.accent.color()).w(64.0)).child(col().grow(1.0).min_w(0.0).child(text(does.to_string()).font(theme::small()).color(THEME.ink.color()).wrap()))
+    row().w_full().gap(12.0).child(text(keys.to_string()).font(theme::small()).color(THEME.accent.color()).w(112.0)).child(col().grow(1.0).min_w(0.0).child(text(does.to_string()).font(theme::small()).color(THEME.ink.color()).wrap()))
 }
 
 pub fn view(s: &State) -> Option<El> {
@@ -30,7 +30,7 @@ pub fn view(s: &State) -> Option<El> {
     let button = col().padding(4.0).child(icon(s.help_open)).key("toggle-help").on_press_tx(|s: &mut State, _| s.help_open = !s.help_open);
     let mut column = col().items_end().gap(8.0).px(20.0).pt(14.0).child(button);
     if s.help_open {
-        let card = SHORTCUTS.iter().fold(col().w(320.0).fill(THEME.panel.color()).radius(10.0).padding(16.0).gap(6.0).key("help"), |c, k| c.child(line(k.keys, k.does)));
+        let card = SHORTCUTS.iter().fold(col().w(360.0).fill(THEME.panel.color()).radius(10.0).padding(16.0).gap(6.0).key("help"), |c, k| c.child(line(k.keys, k.does)));
         let card = IN_PLACE.iter().fold(card, |c, (keys, does)| c.child(line(keys, does)));
         let card = if s.vim.on { VIM.iter().fold(card, |c, (keys, does)| c.child(line(keys, does))) } else { card };
         column = column.child(card.transition(Transition::opacity()));

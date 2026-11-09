@@ -39,12 +39,8 @@ pub fn vim_mode(s: &State) -> Option<El> {
     if !s.vim.on {
         return None;
     }
-    let (label, color) = match s.vim.mode {
-        M::Insert => ("INSERT", THEME.faint.color()),
-        M::Normal => ("NORMAL", THEME.accent.color()),
-        M::Visual => ("VISUAL", THEME.accent.color()),
-    };
-    Some(text(label.to_string()).font(theme::small()).color(color).key("vim-mode"))
+    let color = if s.vim.mode == M::Insert { THEME.faint.color() } else { THEME.accent.color() };
+    Some(text(s.vim.status()).font(theme::small()).color(color).key("vim-mode"))
 }
 
 pub fn notice(s: &State) -> Option<El> {

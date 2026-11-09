@@ -23,5 +23,6 @@ pub fn highlights(s: &State) -> Vec<TextHighlight> {
     let mut out: Vec<TextHighlight> = hovered.map(|t| TextHighlight::new(t.range.clone(), THEME.accent.alpha(0.16))).into_iter().collect();
     out.extend(crate::ui::lab::highlights(s));
     out.extend(crate::ui::review::highlights(s));
+    out.extend(crate::vim::highlights(s));
     out
 }

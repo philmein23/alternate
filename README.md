@@ -4,6 +4,10 @@ A native Mac writing app, built with Rune, for trying different versions of a wo
 
 Write as usual. Click the word count to turn on the marks and tools. Press ⌘A on a word to add alternatives, then rest the pointer on it and use the arrow keys to swap them on the page. Everything is saved in one Markdown file, with the alternatives in a hidden comment at the end.
 
+## Vim
+
+Click **Vim off** at the bottom of the window to turn it on. The app still starts in Insert, so press Esc for Normal mode. It has the operators, motions, text objects, registers, `.` repeat, macros, marks, search and the `:w`, `:q`, `:s` commands. The ⌘ shortcuts keep working in every mode.
+
 ## Install
 
 ```
