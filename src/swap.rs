@@ -101,7 +101,7 @@ impl State {
 
     /// Follows the pointer. Any movement arms the target under it.
     pub fn pointer_moved(&mut self, x: f32, y: f32, tx: &mut Tx) {
-        if self.mode != Mode::Active {
+        if self.mode != Mode::Active || self.panel.is_some() {
             return;
         }
         let hover = self.target_at(x, y).map(|id| Hover { id, armed: true });

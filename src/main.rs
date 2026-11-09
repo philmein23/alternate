@@ -11,6 +11,7 @@ mod model;
 mod rebase;
 #[allow(dead_code)]
 mod segment;
+mod sidebar;
 mod swap;
 mod ui;
 
@@ -41,6 +42,9 @@ pub struct State {
     pub hit: RefCell<Vec<(model::TargetId, Vec<[f32; 4]>)>>,
     pub fade: Option<swap::Fade>,
     pub fade_now: f64,
+    pub panel: Option<sidebar::Panel>,
+    /// Answers a stale row binding after the panel closes.
+    pub spare_edit: TextEdit,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -112,7 +116,7 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
         .placeholder("Start writing.", THEME.faint.color())
         .key("doc")
         .w_full()
-        .color(THEME.ink.color());
+        .color(if s.panel.is_some() { THEME.ink.alpha(THEME.dimmed) } else { THEME.ink.color() });
     // A bare field in a wrapper that grows with it: the page scrolls, not the field.
     let mut grown = col().w_full().min_w(0.0).min_h(style.line_px()).child(field.animate_edit_layout());
     if let Some(marks) = ui::marks::overlay(s, cx) {
@@ -135,11 +139,21 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
         bottom = bottom.child(notice);
     }
     let centre = ui::chrome::marks_toggle(s).map(|t| row().w_full().pt(18.0).justify_center().child(t).pin(Some(0.0), Some(0.0), Some(0.0), None));
-    let mut root = col().w_full().h_full().fill(THEME.page.color()).child(scroller).child(top);
+    let mut main = col().grow(1.0).min_w(0.0).h_full().child(scroller).child(top);
     if let Some(centre) = centre {
-        root = root.child(centre);
+        main = main.child(centre);
     }
-    root.child(bottom.pin(Some(0.0), None, Some(0.0), Some(0.0)))
+    let main = main.child(bottom.pin(Some(0.0), None, Some(0.0), Some(0.0)));
+    let root = row().w_full().h_full().fill(THEME.page.color());
+    match ui::sidebar::view(s) {
+        Some(panel) => root.child(panel).child(main),
+        None => root.child(main),
+    }
+}
+
+fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
+    let fading = swap::poll(s, now, tx);
+    s.track_panel() || fading
 }
 
 fn on_close(s: &mut State, _tx: &mut Tx) {
@@ -153,11 +167,11 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),
-        poll: Some(swap::poll),
+        poll: Some(poll),
         ..AppSpec::new(APP_NAME, rune_mac::saved_size(APP_NAME).unwrap_or((1200.0, 800.0)), State::new, view)
     };
     rune::App::new(spec).chrome(Chrome { full_size_content: true, traffic_lights: Some((18.0, 16.0)), ..Chrome::DEFAULT }).on_close(on_close).run();

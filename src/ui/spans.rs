@@ -8,6 +8,9 @@ use crate::ui::theme::THEME;
 
 pub fn spans(s: &State) -> Vec<Span> {
     let mut out: Vec<Span> = s.doc.ghosts.iter().map(|g| Span::new(g.range.start, g.range.end).color(THEME.ink.alpha(THEME.ghost))).collect();
+    if let Some(t) = s.panel.as_ref().and_then(|p| s.doc.targets.iter().find(|t| t.id == p.id)) {
+        out.push(Span::new(t.range.start, t.range.end).color(THEME.ink.color()));
+    }
     if let Some(fade) = &s.fade {
         out.push(Span::new(fade.range.start, fade.range.end).color(THEME.ink.alpha(fade.alpha(s.fade_now))));
     }

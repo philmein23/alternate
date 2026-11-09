@@ -165,3 +165,34 @@ fn moving_the_pointer_rearms_the_target() {
     hover_target(&mut rt, 1);
     assert_eq!(rt.state.hover.map(|h| h.armed), Some(true));
 }
+
+#[test]
+fn typing_in_a_row_previews_in_the_page_through_the_real_field() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| {
+        s.edit.set_selection(30, 30);
+        s.open_panel();
+    });
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    let last = rt.state.panel.as_ref().unwrap().rows.len() - 1;
+    click(&mut rt, &format!("row-{last}"));
+    press(&mut rt, Key::Text("Z".to_string()));
+    assert!(rt.state.edit.text.contains("the Z was lit"), "{}", rt.state.edit.text);
+    press(&mut rt, Key::Escape);
+    assert!(rt.state.panel.is_none());
+    assert!(rt.state.edit.text.contains("the Z was lit"));
+}
+
+#[test]
+fn clicking_a_tab_changes_the_level() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| {
+        s.edit.set_selection(30, 30);
+        s.open_panel();
+    });
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    click(&mut rt, "tab-sentence");
+    assert_eq!(rt.state.panel.as_ref().unwrap().level, crate::model::Level::Sentence);
+}

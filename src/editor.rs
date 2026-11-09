@@ -56,7 +56,7 @@ impl State {
     pub fn with_doc(doc: Doc) -> State {
         let edit = TextEdit::new(doc.text.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0 }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new("") }
     }
 
     /// Takes in the field after a change.
@@ -183,6 +183,9 @@ pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     let Key::Text(k) = &ev.key else { return false };
+    if ev.mods.ctrl && ev.mods.shift && k.eq_ignore_ascii_case("a") {
+        return s.open_panel();
+    }
     if !ev.mods.cmd {
         return false;
     }
