@@ -16,6 +16,7 @@ pub enum Action {
     Open,
     Undo,
     Redo,
+    SelectAll,
 }
 
 pub struct Shortcut {
@@ -42,6 +43,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     shortcut(Action::Open, 'o', false, true, "\u{2318}O", "Open"),
     shortcut(Action::Undo, 'z', false, true, "\u{2318}Z", "Undo"),
     shortcut(Action::Redo, 'z', true, true, "\u{2318}\u{21e7}Z", "Redo"),
+    shortcut(Action::SelectAll, 'l', true, true, "\u{2318}\u{21e7}L", "Select all"),
 ];
 
 /// Keys that depend on where the pointer or focus is, so they're handled where they apply.
@@ -93,6 +95,13 @@ pub fn run(s: &mut State, action: Action, tx: &mut Tx) -> bool {
         Action::Save => s.save(tx),
         Action::SaveAs => s.save_as(tx),
         Action::Open => s.open(tx),
+        Action::SelectAll => {
+            if !s.edit.focused || (s.vim.on && s.vim.mode != crate::vim::Mode::Insert) {
+                return false;
+            }
+            let end = s.edit.text.len();
+            s.edit.set_selection(0, end);
+        }
         Action::Undo | Action::Redo if s.panel.is_some() => return false,
         Action::Undo => s.undo(),
         Action::Redo => s.redo(),

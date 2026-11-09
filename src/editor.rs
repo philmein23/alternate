@@ -28,8 +28,8 @@ pub struct FileState {
     pub preserved: Option<String>,
     pub dirty: bool,
     pub notice: Option<String>,
-    /// The unsaved document the last ⌘N warned about. Pressing it again on the same writing discards it.
-    pub discard: Option<String>,
+    /// The key that last warned about unsaved writing, and the writing it warned about.
+    pub discard: Option<(char, String)>,
 }
 
 pub fn words(text: &str) -> usize {
@@ -86,22 +86,21 @@ impl State {
         self.mode = if self.mode == Mode::Plain { Mode::Active } else { Mode::Plain };
     }
 
-    /// Starts a blank entry. Unsaved writing is never lost on one press: the first warns, and only
-    /// a second press on that same writing discards it.
-    pub fn new_entry(&mut self) {
-        let current = self.serialized();
-        if self.file.dirty && self.file.discard.as_ref() != Some(&current) {
-            self.file.discard = Some(current);
-            self.file.notice = Some("You have unsaved changes. Press \u{2318}S to save, or \u{2318}N again to discard them.".to_string());
-            return;
+    /// Unsaved writing is never replaced on one press: the first warns, and only a second press
+    /// of that same key on that same writing goes ahead.
+    pub fn confirm_discard(&mut self, key: char) -> bool {
+        let warned = (key, self.serialized());
+        if !self.file.dirty || self.file.discard.as_ref() == Some(&warned) {
+            return true;
         }
-        let doc = Doc::default();
-        self.file = FileState { saved: file::serialize(&doc, None), ..FileState::default() };
-        self.edit = TextEdit::new("");
-        self.edit.focused = true;
-        self.overflow_edit = TextEdit::new("");
+        self.file.discard = Some(warned);
+        self.file.notice = Some(format!("You have unsaved changes. Press \u{2318}S to save, or \u{2318}{key} again to discard them."));
+        false
+    }
+
+    /// Closes whatever was open on the old document, since its ranges mean nothing in the next one.
+    fn clear_open_work(&mut self) {
         self.history = Default::default();
-        self.doc = doc;
         self.panel = None;
         self.review = None;
         self.lab = Default::default();
@@ -113,13 +112,27 @@ impl State {
         self.vim.start_over();
     }
 
+    /// Starts a blank entry.
+    pub fn new_entry(&mut self) {
+        if !self.confirm_discard('N') {
+            return;
+        }
+        let doc = Doc::default();
+        self.file = FileState { saved: file::serialize(&doc, None), ..FileState::default() };
+        self.edit = TextEdit::new("");
+        self.edit.focused = true;
+        self.overflow_edit = TextEdit::new("");
+        self.doc = doc;
+        self.clear_open_work();
+    }
+
     pub fn load_file(&mut self, path: &Path, contents: &str) {
         let loaded = file::parse(contents);
         self.edit = TextEdit::new(loaded.doc.text.clone());
         self.edit.focused = true;
         self.overflow_edit = TextEdit::new(loaded.doc.overflow.clone());
-        self.history = Default::default();
         self.doc = loaded.doc;
+        self.clear_open_work();
         self.file = FileState {
             path: Some(path.to_path_buf()),
             saved: contents.to_string(),
@@ -133,8 +146,13 @@ impl State {
     pub fn open_path(&mut self, path: &Path) {
         match fs::read_to_string(path) {
             Ok(contents) => self.load_file(path, &contents),
-            Err(e) => self.file.notice = Some(format!("Couldn't open that file: {e}")),
+            Err(e) => self.open_failed(&e.to_string()),
         }
+    }
+
+    fn open_failed(&mut self, why: &str) {
+        self.file.discard = None;
+        self.file.notice = Some(format!("Couldn't open that file: {why}"));
     }
 
     pub fn save_to(&mut self, path: &Path) {
@@ -166,10 +184,17 @@ impl State {
     }
 
     pub fn open(&mut self, tx: &mut Tx) {
+        if !self.confirm_discard('O') {
+            return;
+        }
         tx.open_file(file_options("Open", None), |s: &mut State, result, _| match result {
             Ok(Some(path)) => s.open_path(&path),
-            Ok(None) => {}
-            Err(e) => s.file.notice = Some(format!("Couldn't open that file: {e}")),
+            Ok(None) => {
+                if s.file.discard.take().is_some() {
+                    s.file.notice = None;
+                }
+            }
+            Err(e) => s.open_failed(&e.to_string()),
         });
     }
 
