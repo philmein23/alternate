@@ -85,6 +85,14 @@ pub const COLUMN: f32 = 640.0;
 pub const GUTTER: f32 = 40.0;
 pub const SWAP_FADE: f32 = 0.16;
 
+/// The menu's look, from the same palette as the page.
+pub fn kit() -> rune_kit::Kit {
+    let mut kit = rune_kit::Kit::from_palette(rune_kit::PaletteSeed { bg: THEME.panel.color(), fg: THEME.ink.color(), accent: THEME.accent.color() });
+    kit.c.surface_raised = THEME.panel.color();
+    kit.c.surface_raised_hover = THEME.accent.alpha(0.18);
+    kit
+}
+
 pub fn body() -> TextStyle {
     TextStyle::new(16.0, 400.0).lh(28.0).family(Family::Mono)
 }

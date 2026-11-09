@@ -5,8 +5,10 @@ mod editor;
 #[allow(dead_code)] // Grows into use as the features arrive.
 mod file;
 mod fonts;
+mod ghost;
 #[allow(dead_code)]
 mod model;
+mod overflow;
 #[allow(dead_code)]
 mod rebase;
 #[allow(dead_code)]
@@ -50,6 +52,10 @@ pub struct State {
     pub history: undo::History,
     pub sound: sound::Sound,
     pub bursts: Vec<ui::fx::Burst>,
+    pub menu: Option<ui::menu::MenuContext>,
+    pub overflow_open: bool,
+    pub overflow_edit: TextEdit,
+    pub kit: rune_kit::Kit,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -110,6 +116,7 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
         .on_input_change(|s: &mut State, _| s.sync_field())
         .on_input_key(editor::handle_key)
         .on_pointer_move_local(|s: &mut State, p, tx| s.pointer_moved(p.x, p.y, tx))
+        .on_secondary_press_local(|_: &mut State, p, tx| ui::menu::request(p.window(), tx))
         .on_hover_change(|s: &mut State, inside, _| {
             if !inside {
                 s.pointer_left();
@@ -146,6 +153,10 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     if let Some(notice) = ui::chrome::notice(s) {
         bottom = bottom.child(notice);
     }
+    bottom = bottom.child(row().grow(1.0));
+    if let Some(toggle) = ui::chrome::overflow_toggle(s) {
+        bottom = bottom.child(toggle);
+    }
     let centre = ui::chrome::marks_toggle(s).map(|t| row().w_full().pt(18.0).justify_center().child(t).pin(Some(0.0), Some(0.0), Some(0.0), None));
     let mut main = col().grow(1.0).min_w(0.0).h_full().child(scroller).child(top);
     if let Some(centre) = centre {
@@ -153,10 +164,17 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     }
     let main = main.child(bottom.pin(Some(0.0), None, Some(0.0), Some(0.0)));
     let root = row().w_full().h_full().fill(THEME.page.color());
-    match ui::sidebar::view(s) {
+    let root = match ui::sidebar::view(s) {
         Some(panel) => root.child(panel).child(main),
         None => root.child(main),
-    }
+    };
+    let root = match ui::overflow::view(s) {
+        Some(panel) => root.child(panel),
+        None => root,
+    };
+    let mut layer = Vec::new();
+    ui::menu::mount(s, &mut layer);
+    root.children(layer)
 }
 
 fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
@@ -176,7 +194,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),

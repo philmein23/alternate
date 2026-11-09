@@ -247,3 +247,146 @@ fn deleting_on_a_target_sets_off_a_burst_at_its_word() {
     assert_eq!(rt.state.bursts.len(), 1);
     assert!(rt.state.bursts[0].rect[2] > 20.0);
 }
+
+fn ctrl(key: &str, shift: bool) -> KeyEvent {
+    KeyEvent { key: Key::Text(key.to_string()), mods: Mods { ctrl: true, shift, ..Mods::default() } }
+}
+
+fn right_click(rt: &mut Runtime<State>, x: f32, y: f32) {
+    rt.pointer_move(x, y);
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    for _ in 0..3 {
+        rt.frame(1.0 / 60.0);
+    }
+}
+
+fn right_click_target(rt: &mut Runtime<State>, id: u64) {
+    let (fx, fy) = field_origin(rt);
+    let b = rt.state.hit.borrow().iter().find(|(i, _)| *i == id).expect("a mark").1[0];
+    right_click(rt, fx + b[0] + b[2] / 2.0, fy + b[1] + b[3] / 2.0);
+}
+
+#[test]
+fn a_right_click_names_the_word_under_the_pointer_and_keeps_the_selection() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| s.edit.set_selection(0, 3));
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    right_click_target(&mut rt, 1);
+    let ctx = rt.state.menu.clone().expect("the menu opened");
+    assert_eq!(ctx.word.as_deref(), Some("lantern"));
+    assert_eq!(rt.state.edit.range(), (0, 3));
+}
+
+fn choose(rt: &mut Runtime<State>, item: usize) {
+    click(rt, &format!("page-item{item}"));
+    assert!(rt.state.menu.is_none());
+}
+
+#[test]
+fn each_menu_item_does_its_job() {
+    let mut rt = runtime(crate::marked_sample());
+    right_click_target(&mut rt, 1);
+    choose(&mut rt, 0);
+    assert_eq!(rt.state.panel.as_ref().unwrap().rows[0].text, "lantern");
+    rt.update(|s, _| s.close_panel());
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+
+    right_click_target(&mut rt, 1);
+    choose(&mut rt, 1);
+    assert_eq!(rt.state.doc.ghosts.len(), 1);
+
+    right_click_target(&mut rt, 1);
+    assert!(rt.state.menu.as_ref().unwrap().in_ghost);
+    choose(&mut rt, 1);
+    assert!(rt.state.doc.ghosts.is_empty(), "the same item revives");
+
+    right_click_target(&mut rt, 1);
+    choose(&mut rt, 2);
+    assert!(!rt.state.edit.text.contains("lantern"));
+    assert_eq!(rt.state.doc.overflow, "lantern");
+    assert!(rt.find("overflow-field").is_some());
+}
+
+#[test]
+fn the_shortcuts_ghost_and_stash_at_the_caret() {
+    let mut rt = runtime(State::with_doc(Doc::new("one two three")));
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.edit.set_selection(5, 5));
+    rt.frame(1.0 / 60.0);
+    rt.key(ctrl("/", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.doc.ghosts[0].range, 4..7);
+    rt.key(ctrl("/", false));
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.doc.ghosts.is_empty());
+    rt.key(ctrl("X", true));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "one three");
+    assert_eq!(rt.state.doc.overflow, "two");
+}
+
+#[test]
+fn ctrl_return_in_overflow_inserts_at_the_page_caret() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| {
+        s.set_overflow("spare line".to_string());
+        s.overflow_open = true;
+        s.edit.set_selection(0, 0);
+    });
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    click(&mut rt, "overflow-field");
+    rt.key(KeyEvent { key: Key::Enter, mods: Mods { ctrl: true, ..Mods::default() } });
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.edit.text.starts_with("spare line"), "{}", &rt.state.edit.text[..30]);
+    assert_eq!(rt.state.edit.text, rt.state.doc.text);
+}
+
+#[test]
+fn dragging_the_grip_onto_the_page_inserts_there() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| {
+        s.set_overflow("spare".to_string());
+        s.overflow_open = true;
+    });
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    let before = rt.state.edit.text.len();
+    let (gx, gy) = rt.find("overflow-grip").unwrap();
+    let (fx, fy) = field_origin(&rt);
+    rt.pointer_move(gx, gy);
+    rt.pointer_down(gx, gy);
+    rt.pointer_move(fx + 30.0, fy + 10.0);
+    rt.pointer_up(fx + 30.0, fy + 10.0);
+    for _ in 0..3 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert_eq!(rt.state.edit.text.len(), before + 5);
+}
+
+#[test]
+fn a_ghost_over_a_target_survives_a_swap_and_the_save() {
+    let mut s = crate::marked_sample();
+    let at = s.doc.text.find("lantern").unwrap();
+    s.toggle_ghost(at..at + 20);
+    s.show_alt(1, 1);
+    assert!(s.doc.ghosts[0].range.start <= s.doc.targets[0].range.start);
+    let loaded = crate::file::parse(&s.serialized());
+    assert_eq!(loaded.doc.ghosts.len(), 1);
+}
+
+#[test]
+fn ghosts_and_overflow_survive_save_and_reload() {
+    let mut s = State::with_doc(Doc::new("one two three"));
+    s.toggle_ghost(0..3);
+    s.stash(4..7);
+    let text = s.serialized();
+    let mut back = State::with_doc(Doc::default());
+    back.load_file(std::path::Path::new("x.md"), &text);
+    assert_eq!(back.doc.ghosts.len(), 1);
+    assert_eq!(back.doc.overflow, "two");
+    assert_eq!(back.overflow_edit.text, "two");
+}

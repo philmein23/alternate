@@ -13,6 +13,7 @@ struct Lists {
     text: String,
     targets: Vec<Target>,
     ghosts: Vec<Ghost>,
+    overflow: String,
 }
 
 #[derive(Clone, Debug)]
@@ -38,7 +39,7 @@ impl History {
 
 impl State {
     fn lists(&self) -> Lists {
-        Lists { text: self.doc.text.clone(), targets: self.doc.targets.clone(), ghosts: self.doc.ghosts.clone() }
+        Lists { text: self.doc.text.clone(), targets: self.doc.targets.clone(), ghosts: self.doc.ghosts.clone(), overflow: self.doc.overflow.clone() }
     }
 
     /// Runs a change to the lists so that undo can bring back what was there before it.
@@ -62,7 +63,11 @@ impl State {
         out
     }
 
-    fn restore(&mut self, lists: &Lists) {
+    /// `from` is the side being left. Overflow only goes back if nothing was typed there since.
+    fn restore(&mut self, lists: &Lists, from: &Lists) {
+        if self.doc.overflow == from.overflow {
+            self.set_overflow(lists.overflow.clone());
+        }
         self.doc.targets = lists.targets.clone();
         for t in &mut self.doc.targets {
             let active_text = t.alts.get(t.active).map(|a| a.text.clone());
@@ -78,10 +83,10 @@ impl State {
 
     /// Applies saved lists if the field landed on their text. If it didn't, the ranges in them
     /// mean nothing, so the lists are moved to match the field instead.
-    fn settle(&mut self, lists: &Lists) {
+    fn settle(&mut self, lists: &Lists, from: &Lists) {
         debug_assert_eq!(self.edit.text, lists.text, "the field and the list history fell out of step");
         if self.edit.text == lists.text {
-            self.restore(lists);
+            self.restore(lists, from);
         } else {
             self.sync_after_history();
         }
@@ -98,7 +103,7 @@ impl State {
         if change.before.text != change.after.text {
             self.edit.undo();
         }
-        self.settle(&change.before);
+        self.settle(&change.before, &change.after);
         self.history.redo.push(change);
     }
 
@@ -113,7 +118,7 @@ impl State {
         if change.before.text != change.after.text {
             self.edit.redo();
         }
-        self.settle(&change.after);
+        self.settle(&change.after, &change.before);
         self.history.undo.push(change);
     }
 

@@ -50,6 +50,14 @@ impl State {
         true
     }
 
+    /// Opens the panel on a selected range, for the page's right-click menu.
+    pub fn open_panel_on(&mut self, range: std::ops::Range<usize>) -> bool {
+        let Some((level, range)) = segment::target_for_selection(&self.doc.text, range) else { return false };
+        let pos = range.start;
+        self.open_on(level, range, pos);
+        true
+    }
+
     /// Opens the panel on the word at `pos`, for the page's right-click menu.
     pub fn open_panel_at(&mut self, pos: usize) -> bool {
         let Some(range) = segment::word_at(&self.doc.text, pos) else { return false };

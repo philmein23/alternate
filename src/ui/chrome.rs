@@ -27,6 +27,11 @@ pub fn marks_toggle(s: &State) -> Option<El> {
     (s.mode == Mode::Active).then(|| control(label, "toggle-marks", |s, _| s.marks_hidden = !s.marks_hidden))
 }
 
+pub fn overflow_toggle(s: &State) -> Option<El> {
+    let color = if s.overflow_open { THEME.accent.color() } else { THEME.faint.color() };
+    (s.mode == Mode::Active).then(|| text("Overflow".to_string()).font(theme::small()).color(color).key("toggle-overflow").on_press_tx(|s: &mut State, _| s.toggle_overflow()))
+}
+
 pub fn notice(s: &State) -> Option<El> {
     s.file.notice.as_ref().map(|n| text(n.clone()).font(theme::small()).color(THEME.marker.color()).key("notice"))
 }
