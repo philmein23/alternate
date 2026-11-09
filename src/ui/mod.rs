@@ -3,6 +3,7 @@ pub mod fx;
 pub mod marks;
 pub mod menu;
 pub mod overflow;
+pub mod settings;
 pub mod palette_scene;
 pub mod sidebar;
 pub mod spans;

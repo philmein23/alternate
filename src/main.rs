@@ -1,5 +1,6 @@
 //! Alternate. `cargo run` opens the app, `cargo run -- --snap out.png --scene active` renders headless.
 
+mod ai;
 mod article;
 mod editor;
 #[allow(dead_code)] // Grows into use as the features arrive.
@@ -56,6 +57,9 @@ pub struct State {
     pub overflow_open: bool,
     pub overflow_edit: TextEdit,
     pub kit: rune_kit::Kit,
+    pub ai: ai::settings::AiSettings,
+    pub provider: std::sync::Arc<dyn ai::Provider>,
+    pub settings_panel: Option<ui::settings::SettingsPanel>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -68,6 +72,10 @@ pub enum Scene {
 impl State {
     fn new() -> State {
         let mut s = editor::recovery_dir().and_then(|d| State::from_recovery(&d)).unwrap_or_else(|| State::with_doc(Doc::default()));
+        if let Some(dir) = editor::recovery_dir() {
+            s.ai = ai::settings::AiSettings::load(&dir);
+            s.provider = ai::settings::Configured::shared(s.ai.clone());
+        }
         s.edit.focused = true;
         s
     }
@@ -174,6 +182,7 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     };
     let mut layer = Vec::new();
     ui::menu::mount(s, &mut layer);
+    layer.extend(ui::settings::view(s));
     root.children(layer)
 }
 
@@ -189,12 +198,31 @@ fn on_close(s: &mut State, _tx: &mut Tx) {
     }
 }
 
+/// `--ai-check "text"` sends one request by the chosen route and prints what came back.
+fn ai_check(text: &str) -> ! {
+    let settings = editor::recovery_dir().map(|d| ai::settings::AiSettings::load(&d)).unwrap_or_default();
+    match ai::check(ai::settings::Configured::shared(settings), text) {
+        Ok(lines) => {
+            lines.iter().for_each(|l| println!("{l}"));
+            std::process::exit(0)
+        }
+        Err(e) => {
+            eprintln!("{}", e.message());
+            std::process::exit(1)
+        }
+    }
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(i) = args.iter().position(|a| a == "--ai-check") {
+        ai_check(args.get(i + 1).map_or("Say hello.", String::as_str));
+    }
     rune_mac::launch();
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),
