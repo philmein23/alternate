@@ -9,6 +9,7 @@ mod ghost;
 mod lab;
 mod model;
 mod overflow;
+mod post;
 mod rebase;
 mod segment;
 mod shortcuts;
@@ -78,6 +79,7 @@ pub enum Scene {
     #[default]
     App,
     Palette,
+    Icon,
 }
 
 impl State {
@@ -191,6 +193,9 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     if s.scene == Scene::Palette {
         return ui::palette_scene::view(s);
     }
+    if s.scene == Scene::Icon {
+        return ui::palette_scene::icon();
+    }
     let scroller = col().w_full().h_full().key("scroller").scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(84.0).items_center().child(page(s, cx));
     let top = row().px(96.0).pt(18.0).child(ui::chrome::count(s)).pin(Some(0.0), Some(0.0), None, None);
     let mut bottom = row().gap(24.0).w_full().px(20.0).pb(16.0).items_center();
@@ -277,7 +282,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("review", |s| { *s = marked_sample(); let text = s.doc.text.clone(); let cuts = ["before the lantern was lit, and ", "as if it had only stopped for a moment", "stopping, and "].iter().map(|q| { let at = text.find(q).unwrap(); lab::trim::Cut { range: at..at + q.len(), kept: false, fix: None } }).collect(); s.review = Some(lab::trim::Review::new(lab::trim::Kind::Trim(lab::trim::Level::More), cuts, text)); }), ("worst-para", |s| *s = worst_scene("The tide came in slowly over the flats. ".repeat(60))), ("worst-mixed", |s| *s = worst_scene(format!("Emoji \u{1f600}\u{1f469}\u{200d}\u{1f4bb} here. \u{5e9}\u{5dc}\u{5d5}\u{5dd} \u{5e2}\u{5d5}\u{5dc}\u{5dd}. \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{7ae0}\u{3067}\u{3059}\u{3002}\n\nhttps://example.com/{}", "averyveryverylongpathsegment".repeat(40)))), ("help", |s| { *s = marked_sample(); s.help_open = true; }), ("first", |s| *s = State::with_doc(Doc::default())), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("review", |s| { *s = marked_sample(); let text = s.doc.text.clone(); let cuts = ["before the lantern was lit, and ", "as if it had only stopped for a moment", "stopping, and "].iter().map(|q| { let at = text.find(q).unwrap(); lab::trim::Cut { range: at..at + q.len(), kept: false, fix: None } }).collect(); s.review = Some(lab::trim::Review::new(lab::trim::Kind::Trim(lab::trim::Level::More), cuts, text)); }), ("worst-para", |s| *s = worst_scene("The tide came in slowly over the flats. ".repeat(60))), ("worst-mixed", |s| *s = worst_scene(format!("Emoji \u{1f600}\u{1f469}\u{200d}\u{1f4bb} here. \u{5e9}\u{5dc}\u{5d5}\u{5dd} \u{5e2}\u{5d5}\u{5dc}\u{5dd}. \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{7ae0}\u{3067}\u{3059}\u{3002}\n\nhttps://example.com/{}", "averyveryverylongpathsegment".repeat(40)))), ("help", |s| { *s = marked_sample(); s.help_open = true; }), ("first", |s| *s = State::with_doc(Doc::default())), ("icon", |s| s.scene = Scene::Icon), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),

@@ -7,4 +7,4 @@ rev=$(sed -n 's/^rune = .*rev = "\(.\{7\}\).*/\1/p' Cargo.toml)
 cargo build --release
 rune=$(ls -d "$HOME"/.cargo/git/checkouts/rune-*/"$rev" | head -1)
 MAC_APP_SIGN="${MAC_APP_SIGN:-Apple Development: Phil Nguyen (654A673W36)}" \
-  "$rune/scripts/mac-app" --name "Alternate" --id ai.dbla.alternate --exe alternate --bin "$PWD/target/release/alternate"
+  "$rune/scripts/mac-app" --name "Alternate" --id ai.dbla.alternate --exe alternate --bin "$PWD/target/release/alternate" --icon "$PWD/assets/icon.png"
