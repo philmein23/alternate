@@ -12,3 +12,10 @@ rune-mac = { git = "https://github.com/anomalyco/rune", rev = "bca47138e9c31a787
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# Adds Cx::text_rects and Picked::text_index. See branch alternate-text-rects in this clone.
+[patch."https://github.com/anomalyco/rune"]
+rune = { path = "../rune-alternate/crates/rune" }
+rune-kit = { path = "../rune-alternate/crates/rune-kit" }
+rune-fx = { path = "../rune-alternate/crates/rune-fx" }
+rune-mac = { path = "../rune-alternate/crates/rune-mac" }
