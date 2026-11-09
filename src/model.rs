@@ -77,8 +77,25 @@ impl Doc {
     pub fn sync_text(&mut self, new: &str, caret: Option<usize>) -> Option<Edit> {
         let edit = rebase::diff(&self.text, new, caret)?;
         self.text = new.to_string();
+        self.rebase_all(edit, None);
+        Some(edit)
+    }
+
+    /// Replaces a span of the text directly and moves every range. `keep` names a target the
+    /// caller will place itself.
+    pub fn splice(&mut self, range: Range<usize>, with: &str, keep: Option<TargetId>) -> Edit {
+        self.text.replace_range(range.clone(), with);
+        let edit = Edit { start: range.start, removed: range.len(), inserted: with.len() };
+        self.rebase_all(edit, keep);
+        edit
+    }
+
+    fn rebase_all(&mut self, edit: Edit, keep: Option<TargetId>) {
         let text = &self.text;
         self.targets.retain_mut(|t| {
+            if Some(t.id) == keep {
+                return true;
+            }
             let was_original = t.alts.get(t.active).is_some_and(|a| a.text == t.original);
             let touched = edit.start < t.range.end && edit.start + edit.removed > t.range.start;
             let Some(range) = rebase::rebase(t.range.clone(), edit) else { return false };
@@ -92,7 +109,6 @@ impl Doc {
             true
         });
         self.ghosts = merged(self.ghosts.iter().filter_map(|g| rebase::rebase(g.range.clone(), edit)).collect());
-        Some(edit)
     }
 
     /// Fades `range`, joining any ghost it touches.

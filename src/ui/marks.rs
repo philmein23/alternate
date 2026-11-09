@@ -92,9 +92,11 @@ fn paint(mut shape: Shape, mark: MarkShape, line: Color) -> Shape {
     shape
 }
 
-/// The canvas of marks for the page, or nothing while they are hidden.
+/// Reads every target's line boxes for the frame, keeps them for pointer tests, and draws the marks
+/// unless they are hidden.
 pub fn overlay(s: &State, cx: &mut Cx<State>) -> Option<El> {
-    if s.mode != Mode::Active || s.marks_hidden || s.doc.targets.is_empty() {
+    s.hit.borrow_mut().clear();
+    if s.mode != Mode::Active || s.doc.targets.is_empty() {
         return None;
     }
     let ranges: Vec<_> = s.doc.targets.iter().map(|t| t.range.clone()).collect();
@@ -102,13 +104,15 @@ pub fn overlay(s: &State, cx: &mut Cx<State>) -> Option<El> {
     let [fx, fy, ..] = cx.layout("doc")?;
     let mut shape = Shape::new();
     for (t, lines) in s.doc.targets.iter().zip(boxes) {
-        let local: Vec<_> = lines.iter().map(|b| [b[0] - fx + MARGIN, b[1] - fy, b[2], b[3]]).collect();
-        if let Some(mark) = mark_shape(t.level, t.id, &local, !t.is_original(&s.doc.text)) {
+        let local: Vec<_> = lines.iter().map(|b| [b[0] - fx, b[1] - fy, b[2], b[3]]).collect();
+        let margin: Vec<_> = local.iter().map(|b| [b[0] + MARGIN, b[1], b[2], b[3]]).collect();
+        if !s.marks_hidden && let Some(mark) = mark_shape(t.level, t.id, &margin, !t.is_original(&s.doc.text)) {
             let line = if mark.margin { THEME.marker.color() } else { THEME.accent.alpha(0.75) };
             shape = paint(shape, mark, line);
         }
+        s.hit.borrow_mut().push((t.id, local));
     }
-    Some(canvas(shape).pin(Some(-MARGIN), Some(0.0), Some(0.0), Some(0.0)).key("marks"))
+    (!s.marks_hidden).then(|| canvas(shape).pin(Some(-MARGIN), Some(0.0), Some(0.0), Some(0.0)).key("marks"))
 }
 
 #[cfg(test)]

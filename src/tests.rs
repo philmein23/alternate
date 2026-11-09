@@ -103,3 +103,65 @@ fn the_dots_button_hides_the_marks_and_keeps_the_alternatives() {
     assert!(rt.find("marks").is_none());
     assert_eq!(rt.state.doc.targets.len(), 4);
 }
+
+fn field_origin(rt: &Runtime<State>) -> (f32, f32) {
+    let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("doc")).expect("the field");
+    (e.rect[0], e.rect[1])
+}
+
+fn hover_target(rt: &mut Runtime<State>, id: u64) {
+    let (fx, fy) = field_origin(rt);
+    let b = rt.state.hit.borrow().iter().find(|(i, _)| *i == id).expect("a mark")
+        .1[0];
+    let (x, y) = (fx + b[0] + b[2] / 2.0, fy + b[1] + b[3] / 2.0);
+    rt.pointer_move(x, y);
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+}
+
+#[test]
+fn arrows_with_no_hover_move_the_caret() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.hover = None);
+    let before = rt.state.edit.text.clone();
+    let caret = rt.state.edit.focus;
+    press(&mut rt, Key::Left);
+    assert_eq!(rt.state.edit.text, before);
+    assert_ne!(rt.state.edit.focus, caret);
+}
+
+#[test]
+fn hovering_a_target_then_pressing_right_swaps_it() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    assert_eq!(rt.state.hover.map(|h| h.id), Some(1));
+    press(&mut rt, Key::Right);
+    assert!(rt.state.edit.text.contains("the lamp was lit"), "{}", rt.state.edit.text);
+    press(&mut rt, Key::Right);
+    assert!(rt.state.edit.text.contains("the lantern was lit"));
+}
+
+#[test]
+fn once_typing_starts_arrows_go_back_to_the_caret() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Text("x".to_string()));
+    assert_eq!(rt.state.hover.map(|h| h.armed), Some(false));
+    let caret = rt.state.edit.focus;
+    press(&mut rt, Key::Left);
+    assert!(rt.state.edit.text.contains("lantern"));
+    assert_ne!(rt.state.edit.focus, caret);
+}
+
+#[test]
+fn moving_the_pointer_rearms_the_target() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Text("x".to_string()));
+    hover_target(&mut rt, 1);
+    assert_eq!(rt.state.hover.map(|h| h.armed), Some(true));
+}

@@ -1,5 +1,6 @@
 //! Alternate. `cargo run` opens the app, `cargo run -- --snap out.png --scene active` renders headless.
 
+mod article;
 mod editor;
 #[allow(dead_code)] // Grows into use as the features arrive.
 mod file;
@@ -10,10 +11,13 @@ mod model;
 mod rebase;
 #[allow(dead_code)]
 mod segment;
+mod swap;
 mod ui;
 
 #[cfg(test)]
 mod tests;
+
+use std::cell::RefCell;
 
 use rune::{AppSpec, Chrome, Cx, El, ScrollSpec, TextEdit, Tx, col, row, text_input};
 
@@ -32,6 +36,11 @@ pub struct State {
     pub mode: Mode,
     pub marks_hidden: bool,
     pub scene: Scene,
+    pub hover: Option<swap::Hover>,
+    /// Each target's line boxes in the field's own points, from the last view.
+    pub hit: RefCell<Vec<(model::TargetId, Vec<[f32; 4]>)>>,
+    pub fade: Option<swap::Fade>,
+    pub fade_now: f64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -91,6 +100,14 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
         .on_edit(|s: &mut State| &mut s.edit)
         .on_input_change(|s: &mut State, _| s.sync_field())
         .on_input_key(editor::handle_key)
+        .on_pointer_move_local(|s: &mut State, p, tx| s.pointer_moved(p.x, p.y, tx))
+        .on_hover_change(|s: &mut State, inside, _| {
+            if !inside {
+                s.pointer_left();
+            }
+        })
+        .spans(ui::spans::spans(s))
+        .text_highlights(ui::spans::highlights(s))
         .selection_color(THEME.accent.alpha(0.3))
         .placeholder("Start writing.", THEME.faint.color())
         .key("doc")
@@ -136,10 +153,11 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),
+        poll: Some(swap::poll),
         ..AppSpec::new(APP_NAME, rune_mac::saved_size(APP_NAME).unwrap_or((1200.0, 800.0)), State::new, view)
     };
     rune::App::new(spec).chrome(Chrome { full_size_content: true, traffic_lights: Some((18.0, 16.0)), ..Chrome::DEFAULT }).on_close(on_close).run();
