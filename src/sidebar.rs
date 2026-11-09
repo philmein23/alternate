@@ -234,7 +234,7 @@ pub fn row_key(s: &mut State, i: usize, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if ev.mods.cmd {
         // Undo inside a row undoes the row's own typing.
-        if matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("z")) {
+        if ev.is_command('z') {
             return false;
         }
         return crate::editor::handle_key(s, ev, tx);

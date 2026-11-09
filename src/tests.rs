@@ -206,7 +206,8 @@ fn clicking_a_tab_changes_the_level() {
 }
 
 fn cmd(key: &str) -> KeyEvent {
-    KeyEvent { key: Key::Text(key.to_string()), mods: Mods { cmd: true, ..Mods::default() } }
+    // A real window sends ⌘ chords as `Key::Command`, lower-cased.
+    KeyEvent { key: Key::Command(key.chars().next().unwrap().to_ascii_lowercase()), mods: Mods { cmd: true, ..Mods::default() } }
 }
 
 #[test]
@@ -544,4 +545,33 @@ fn the_help_lists_every_shortcut() {
 fn an_empty_first_launch_shows_where_to_start() {
     let rt = runtime(State::with_doc(Doc::default()));
     assert!(rt.find("first-hint").is_some());
+}
+
+#[test]
+fn return_breaks_the_line_and_undoes_in_step_with_the_lists() {
+    let mut rt = runtime(State::with_doc(Doc::new("one two")));
+    click(&mut rt, "doc");
+    rt.update(|s, _| s.edit.set_selection(3, 3));
+    rt.frame(1.0 / 60.0);
+    press(&mut rt, Key::Enter);
+    assert_eq!(rt.state.edit.text, "one\n two");
+    assert_eq!(rt.state.doc.text, rt.state.edit.text);
+    assert_eq!(rt.state.edit.focus, 4);
+    rt.key(cmd("z"));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "one two");
+    assert_eq!(rt.state.doc.text, "one two");
+}
+
+#[test]
+fn return_breaks_the_line_in_overflow_too() {
+    let mut rt = runtime(crate::marked_sample());
+    rt.update(|s, _| {
+        s.set_overflow("spare".to_string());
+        s.overflow_open = true;
+    });
+    settle(&mut rt);
+    click(&mut rt, "overflow-field");
+    press(&mut rt, Key::Enter);
+    assert!(rt.state.doc.overflow.contains('\n'), "{:?}", rt.state.doc.overflow);
 }

@@ -85,7 +85,7 @@ pub fn field_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         let at = s.edit.range().1;
         return s.use_overflow(at);
     }
-    if ev.mods.cmd && !matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("z")) {
+    if ev.mods.cmd && !ev.is_command('z') {
         return crate::editor::handle_key(s, ev, tx);
     }
     false

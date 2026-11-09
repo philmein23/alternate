@@ -29,6 +29,10 @@ pub fn view(s: &State) -> Option<El> {
         .on_edit(|s: &mut State| &mut s.overflow_edit)
         .on_input_change(|s: &mut State, _| s.overflow_changed())
         .on_input_key(overflow::field_key)
+        .on_submit(|s: &mut State, _| {
+            s.overflow_edit.insert("\n");
+            s.overflow_changed();
+        })
         .placeholder("Set things aside here.", THEME.faint.color())
         .selection_color(THEME.accent.alpha(0.3))
         .color(THEME.ink.color())

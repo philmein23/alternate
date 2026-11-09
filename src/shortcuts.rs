@@ -19,7 +19,7 @@ pub enum Action {
 
 pub struct Shortcut {
     pub action: Action,
-    key: &'static str,
+    key: char,
     ctrl: bool,
     shift: bool,
     cmd: bool,
@@ -27,20 +27,20 @@ pub struct Shortcut {
     pub does: &'static str,
 }
 
-const fn shortcut(action: Action, key: &'static str, ctrl: bool, shift: bool, cmd: bool, keys: &'static str, does: &'static str) -> Shortcut {
+const fn shortcut(action: Action, key: char, ctrl: bool, shift: bool, cmd: bool, keys: &'static str, does: &'static str) -> Shortcut {
     Shortcut { action, key, ctrl, shift, cmd, keys, does }
 }
 
 pub const SHORTCUTS: &[Shortcut] = &[
-    shortcut(Action::Alternatives, "a", true, true, false, "\u{2303}\u{21e7}A", "Alternatives"),
-    shortcut(Action::AiAlternatives, "g", true, true, false, "\u{2303}\u{21e7}G", "AI alternatives"),
-    shortcut(Action::Ghost, "/", true, false, false, "\u{2303}/", "Ghost or revive"),
-    shortcut(Action::Stash, "x", true, true, false, "\u{2303}\u{21e7}X", "Stash in Overflow"),
-    shortcut(Action::Save, "s", false, false, true, "\u{2318}S", "Save"),
-    shortcut(Action::SaveAs, "s", false, true, true, "\u{2318}\u{21e7}S", "Save as"),
-    shortcut(Action::Open, "o", false, false, true, "\u{2318}O", "Open"),
-    shortcut(Action::Undo, "z", false, false, true, "\u{2318}Z", "Undo"),
-    shortcut(Action::Redo, "z", false, true, true, "\u{2318}\u{21e7}Z", "Redo"),
+    shortcut(Action::Alternatives, 'a', true, true, false, "\u{2303}\u{21e7}A", "Alternatives"),
+    shortcut(Action::AiAlternatives, 'g', true, true, false, "\u{2303}\u{21e7}G", "AI alternatives"),
+    shortcut(Action::Ghost, '/', true, false, false, "\u{2303}/", "Ghost or revive"),
+    shortcut(Action::Stash, 'x', true, true, false, "\u{2303}\u{21e7}X", "Stash in Overflow"),
+    shortcut(Action::Save, 's', false, false, true, "\u{2318}S", "Save"),
+    shortcut(Action::SaveAs, 's', false, true, true, "\u{2318}\u{21e7}S", "Save as"),
+    shortcut(Action::Open, 'o', false, false, true, "\u{2318}O", "Open"),
+    shortcut(Action::Undo, 'z', false, false, true, "\u{2318}Z", "Undo"),
+    shortcut(Action::Redo, 'z', false, true, true, "\u{2318}\u{21e7}Z", "Redo"),
 ];
 
 /// Keys that depend on where the pointer or focus is, so they're handled where they apply.
@@ -52,8 +52,19 @@ pub fn keys(action: Action) -> &'static str {
 }
 
 pub fn find(ev: &KeyEvent) -> Option<Action> {
-    let Key::Text(k) = &ev.key else { return None };
-    SHORTCUTS.iter().find(|s| k.eq_ignore_ascii_case(s.key) && s.ctrl == ev.mods.ctrl && s.shift == ev.mods.shift && s.cmd == ev.mods.cmd).map(|s| s.action)
+    // A real window sends ⌘ chords as `Key::Command`, and Control chords as text.
+    let k = match &ev.key {
+        Key::Command(c) => *c,
+        Key::Text(t) => {
+            let mut chars = t.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => c,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    SHORTCUTS.iter().find(|s| k.eq_ignore_ascii_case(&s.key) && s.ctrl == ev.mods.ctrl && s.shift == ev.mods.shift && s.cmd == ev.mods.cmd && !ev.mods.alt).map(|s| s.action)
 }
 
 /// Runs a command. False means it didn't apply, and the key should carry on to the field.
@@ -78,8 +89,9 @@ mod tests {
     use super::*;
     use rune::Mods;
 
-    fn ev(key: &str, mods: Mods) -> KeyEvent {
-        KeyEvent { key: Key::Text(key.to_string()), mods }
+    /// Shaped as a real window sends it: `Key::Command` under ⌘, text otherwise.
+    fn ev(key: char, mods: Mods) -> KeyEvent {
+        KeyEvent { key: if mods.cmd { Key::Command(key.to_ascii_lowercase()) } else { Key::Text(key.to_string()) }, mods }
     }
 
     #[test]
@@ -100,12 +112,12 @@ mod tests {
 
     #[test]
     fn plain_typing_is_no_command() {
-        assert_eq!(find(&ev("a", Mods::default())), None);
-        assert_eq!(find(&ev("/", Mods::default())), None);
+        assert_eq!(find(&ev('a', Mods::default())), None);
+        assert_eq!(find(&ev('/', Mods::default())), None);
     }
 
     #[test]
     fn a_capital_from_shift_still_matches() {
-        assert_eq!(find(&ev("Z", Mods { cmd: true, shift: true, ..Mods::default() })), Some(Action::Redo));
+        assert_eq!(find(&ev('Z', Mods { cmd: true, shift: true, ..Mods::default() })), Some(Action::Redo));
     }
 }

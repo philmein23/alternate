@@ -158,6 +158,10 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
         .on_edit(|s: &mut State| &mut s.edit)
         .on_input_change(|s: &mut State, _| s.sync_field())
         .on_input_key(editor::handle_key)
+        .on_submit(|s: &mut State, _| {
+            s.edit.insert("\n");
+            s.sync_field();
+        })
         .on_pointer_move_local(|s: &mut State, p, tx| s.pointer_moved(p.x, p.y, tx))
         .on_secondary_press_local(|_: &mut State, p, tx| ui::menu::request(p.window(), tx))
         .on_hover_change(|s: &mut State, inside, _| {
