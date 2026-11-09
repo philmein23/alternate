@@ -50,8 +50,7 @@ fn carried(p: usize, edit: Edit) -> usize {
 impl State {
     /// Puts alternative `next` on the page, in one undo step with any a/an fix, and keeps the caret.
     pub fn show_alt(&mut self, id: TargetId, next: usize) -> bool {
-        let Some(i) = self.doc.targets.iter().position(|t| t.id == id) else { return false };
-        let t = &self.doc.targets[i];
+        let Some(t) = self.doc.targets.iter().find(|t| t.id == id) else { return false };
         let Some(new) = t.alts.get(next).map(|a| a.text.clone()) else { return false };
         let range = t.range.clone();
         let fix = article::fix(&self.doc.text, range.start, &new);
@@ -67,9 +66,11 @@ impl State {
         });
 
         let mut edits = vec![self.doc.splice(range.clone(), &new, Some(id))];
-        let t = &mut self.doc.targets[i];
-        t.range = range.start..range.start + new.len();
-        t.active = next;
+        // The splice may have removed smaller targets inside this one, so positions have moved.
+        if let Some(t) = self.doc.targets.iter_mut().find(|t| t.id == id) {
+            t.range = range.start..range.start + new.len();
+            t.active = next;
+        }
         if let Some((r, fixed)) = &fix {
             edits.push(self.doc.splice(r.clone(), fixed, None));
         }

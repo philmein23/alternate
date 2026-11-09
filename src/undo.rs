@@ -1,7 +1,7 @@
 //! One undo for text and alternatives together. The field keeps its own text history. Beside it, a
 //! stack remembers what the lists looked like around each change, tied to the text after that change.
 
-use crate::model::{Ghost, Target, TargetId};
+use crate::model::{Alt, Ghost, Target, TargetId};
 use crate::State;
 
 const LIMIT: usize = 200;
@@ -84,7 +84,7 @@ impl State {
     }
 
     /// Records a finished batch of AI alternatives as one change, whatever happened while it arrived.
-    pub fn record_batch(&mut self, id: TargetId, added: &[String]) {
+    pub fn record_batch(&mut self, id: TargetId, added: &[String], replaced: &[Alt]) {
         if added.is_empty() {
             return;
         }
@@ -93,6 +93,7 @@ impl State {
         if let Some(t) = before.targets.iter_mut().find(|t| t.id == id) {
             let shown = t.alts.get(t.active).map(|a| a.text.clone());
             t.alts.retain(|a| !added.contains(&a.text) || Some(&a.text) == shown.as_ref());
+            t.alts.extend(replaced.iter().filter(|r| !added.contains(&r.text)).cloned());
             t.active = shown.and_then(|text| t.alts.iter().position(|a| a.text == text)).unwrap_or(0);
         }
         let depth = self.edit.undo_depth();
@@ -172,7 +173,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Alt, Doc, Level, Source};
+    use crate::model::{Doc, Level, Source};
 
     fn state() -> State {
         let mut doc = Doc::new("the cat sat on a mat");
