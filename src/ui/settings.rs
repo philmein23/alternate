@@ -43,7 +43,7 @@ impl State {
     pub fn save_secret(&mut self) {
         let Some(target) = self.ai.route.secret() else { return };
         let Some(panel) = &mut self.settings_panel else { return };
-        let value = panel.secret.text.trim().to_string();
+        let value = secrets::without_whitespace(&panel.secret.text);
         if value.is_empty() {
             return;
         }

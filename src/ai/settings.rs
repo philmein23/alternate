@@ -67,7 +67,7 @@ impl Provider for Configured {
     fn run(&self, req: &AiRequest, sink: &mut dyn FnMut(AiEvent), cancel: &AtomicBool) {
         let secret = self.0.route.secret().map(secrets::load);
         if matches!(secret, Some(None)) {
-            return sink(AiEvent::Failed(AiError::Credentials));
+            return sink(AiEvent::Failed(AiError::NoSecret));
         }
         let secret = secret.flatten();
         if self.0.route == Route::ApiKey {

@@ -46,11 +46,19 @@ pub fn environment(claude: &Path, home: &str, token: Option<&str>) -> Vec<(Strin
     env
 }
 
+/// The command's own words for a refused sign-in, safe to put on screen.
+fn reason(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().map(|w| if w.contains("sk-ant-") { "[token]" } else { w }).collect();
+    let line = words.join(" ");
+    let short: String = line.chars().take(200).collect();
+    if short.ends_with(['.', '!', '?']) { short } else { format!("{short}.") }
+}
+
 pub fn classify(text: &str) -> AiError {
     let t = text.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| t.contains(w));
-    if has(&["authenticate", "log in", "login", "expired", "unauthorized", "invalid api key", "oauth", "401"]) {
-        AiError::Credentials
+    if has(&["authenticate", "log in", "logged in", "login", "expired", "unauthorized", "invalid api key", "auth token", "oauth", "401"]) {
+        AiError::SignIn(reason(text))
     } else if has(&["rate limit", "usage limit", "limit reached", "429", "overloaded"]) {
         AiError::RateLimited
     } else if has(&["econnrefused", "enotfound", "network", "connection", "timed out", "fetch failed"]) {
@@ -208,9 +216,10 @@ mod tests {
     }
 
     #[test]
-    fn the_real_expired_login_message_means_credentials() {
+    fn the_real_expired_login_message_is_a_refused_sign_in() {
         let result = json!({"type":"result","subtype":"success","is_error":true,"result":EXPIRED}).to_string();
-        assert_eq!(parse(Format::Lines, &[result], ""), [AiEvent::Failed(AiError::Credentials)]);
+        let got = parse(Format::Lines, &[result], "");
+        assert!(matches!(got.as_slice(), [AiEvent::Failed(AiError::SignIn(why))] if why.contains("reached its time limit")), "{got:?}");
     }
 
     #[test]
@@ -268,5 +277,21 @@ mod tests {
         let mut out = Vec::new();
         run(Path::new("/nonexistent/claude"), None, &request(Format::Lines), &mut |e| out.push(e), &AtomicBool::new(false));
         assert_eq!(out, [AiEvent::Failed(AiError::MissingCli)]);
+    }
+
+    #[test]
+    fn a_refused_sign_in_shows_the_commands_own_reason() {
+        for text in ["Failed to authenticate. API Error: 401 OAuth access token is invalid.", "Not logged in \u{b7} Please run /login", "Invalid auth token \u{b7} Invalid Authorization header value from CLAUDE_CODE_OAUTH_TOKEN: it contains a line break at character 22"] {
+            match classify(text) {
+                AiError::SignIn(why) => assert!(why.contains(&text[..12])),
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_token_never_reaches_the_screen() {
+        let AiError::SignIn(why) = classify("401 unauthorized for sk-ant-oat01-secretvalue here") else { panic!() };
+        assert!(!why.contains("secretvalue"), "{why}");
     }
 }

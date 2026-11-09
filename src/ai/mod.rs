@@ -48,6 +48,10 @@ pub struct AiRequest {
 pub enum AiError {
     /// The login, token or key was refused or has run out.
     Credentials,
+    /// Nothing saved yet for the chosen route.
+    NoSecret,
+    /// The claude command turned the sign-in down, and why.
+    SignIn(String),
     NoNetwork,
     RateLimited,
     MissingCli,
@@ -59,6 +63,8 @@ impl AiError {
     pub fn message(&self) -> String {
         match self {
             AiError::Credentials => "Your Claude sign-in has expired or was refused. Update it in AI settings.".to_string(),
+            AiError::NoSecret => "Nothing is saved for this sign-in yet. Add it in AI settings.".to_string(),
+            AiError::SignIn(why) => format!("Claude refused the sign-in: {why} Update it in AI settings."),
             AiError::NoNetwork => "Couldn't reach Claude. Check your connection and try again.".to_string(),
             AiError::RateLimited => "You've hit a usage limit. Try again in a little while.".to_string(),
             AiError::MissingCli => "Couldn't find the claude command. Install Claude Code, or choose an API key in AI settings.".to_string(),
