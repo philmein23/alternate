@@ -60,6 +60,10 @@ pub struct State {
     pub ai: ai::settings::AiSettings,
     pub provider: std::sync::Arc<dyn ai::Provider>,
     pub settings_panel: Option<ui::settings::SettingsPanel>,
+    pub pending: Option<ai::alternatives::Pending>,
+    pub dance_now: f64,
+    /// Renders the waiting row without a request, for the snapshot scene.
+    pub demo_asking: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -189,7 +193,8 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
 fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     let fading = swap::poll(s, now, tx);
     let burning = ui::fx::poll(s, now, tx);
-    s.track_panel() || fading || burning
+    let asking = ai::alternatives::poll(s, now, tx);
+    s.track_panel() || fading || burning || asking
 }
 
 fn on_close(s: &mut State, _tx: &mut Tx) {
@@ -222,7 +227,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),

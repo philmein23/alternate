@@ -35,11 +35,18 @@ fn row_style() -> TextStyle {
     TextStyle::new(14.0, 400.0).lh(24.0).family(rune::Family::Mono)
 }
 
+/// The robot, hopping while it waits.
+fn dancing_robot(s: &State) -> El {
+    robot().offset(0.0, (s.dance_now as f32 * 10.0).sin() * 2.5)
+}
+
 fn alt_row(s: &State, panel: &Panel, i: usize) -> El {
     let target = s.doc.targets.iter().find(|t| t.id == panel.id);
     let alt = target.and_then(|t| t.alts.get(i));
     let on = target.is_some_and(|t| t.active == i && alt.is_some());
+    let waiting = (s.pending.is_some() || s.demo_asking) && i == panel.rows.len() - 1;
     let mark = match alt {
+        _ if waiting => dancing_robot(s),
         Some(a) if a.source == Source::Ai => robot(),
         _ => bullet(on),
     };
@@ -63,6 +70,10 @@ pub fn view(s: &State) -> Option<El> {
     let tabs = row().gap(14.0).child(tab(panel, "Word", "tab-word", Level::Word)).child(tab(panel, "Sentence", "tab-sentence", Level::Sentence)).child(tab(panel, "Paragraph", "tab-paragraph", Level::Paragraph));
     let rows = (0..panel.rows.len()).fold(col().w_full().gap(10.0), |c, i| c.child(alt_row(s, panel, i)));
     let list = col().w_full().grow(1.0).min_h(0.0).scroll(rune::ScrollSpec { stick_bottom: false }).child(rows).key("rows");
-    let footer = text("return adds · esc closes".to_string()).font(theme::small()).color(THEME.faint.color());
-    Some(col().w(WIDTH).h_full().fill(THEME.panel.color()).pt(52.0).px(20.0).pb(16.0).gap(16.0).child(tabs).child(list).child(footer).key("panel"))
+    let footer = text("return adds · ?? asks claude · esc closes".to_string()).font(theme::small()).color(THEME.faint.color()).wrap();
+    let mut card = col().w(WIDTH).h_full().fill(THEME.panel.color()).pt(52.0).px(20.0).pb(16.0).gap(16.0).child(tabs).child(list);
+    if let Some(message) = &panel.message {
+        card = card.child(text(message.clone()).font(theme::small()).color(THEME.marker.color()).wrap().key("panel-message"));
+    }
+    Some(card.child(footer).key("panel"))
 }

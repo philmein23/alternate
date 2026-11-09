@@ -1,6 +1,7 @@
 //! One way of asking a model for text, whichever route reaches it. A request runs on its own
 //! thread and its events are collected from `poll`, so the window never waits for the network.
 
+pub mod alternatives;
 pub mod anthropic;
 pub mod claude_cli;
 pub mod secrets;
@@ -81,13 +82,11 @@ pub trait Provider: Send + Sync {
 }
 
 /// A request in flight. Dropping it cancels it.
-#[allow(dead_code)] // Called from the next phase on.
 pub struct Job {
     rx: Receiver<AiEvent>,
     cancel: Arc<AtomicBool>,
 }
 
-#[allow(dead_code)]
 impl Job {
     pub fn start(provider: Arc<dyn Provider>, req: AiRequest) -> Job {
         let (tx, rx) = channel();
@@ -149,6 +148,29 @@ pub fn check(provider: Arc<dyn Provider>, text: &str) -> Result<Vec<String>, AiE
         _ => {}
     }, &cancel);
     out.map_or(Ok(lines), Err)
+}
+
+/// A provider whose events a test feeds in by hand.
+#[cfg(test)]
+pub fn fake() -> (Arc<dyn Provider>, std::sync::mpsc::Sender<AiEvent>) {
+    use std::sync::Mutex;
+    struct Fake(Mutex<Receiver<AiEvent>>);
+    impl Provider for Fake {
+        fn run(&self, _: &AiRequest, sink: &mut dyn FnMut(AiEvent), cancel: &AtomicBool) {
+            let rx = self.0.lock().unwrap();
+            while !cancel.load(Ordering::Relaxed) {
+                if let Ok(e) = rx.recv_timeout(std::time::Duration::from_millis(5)) {
+                    let last = matches!(e, AiEvent::Done | AiEvent::Failed(_));
+                    sink(e);
+                    if last {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    let (tx, rx) = channel();
+    (Arc::new(Fake(Mutex::new(rx))), tx)
 }
 
 #[cfg(test)]

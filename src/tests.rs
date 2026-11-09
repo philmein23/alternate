@@ -295,16 +295,16 @@ fn each_menu_item_does_its_job() {
     rt.frame(1.0 / 60.0);
 
     right_click_target(&mut rt, 1);
-    choose(&mut rt, 1);
+    choose(&mut rt, 2);
     assert_eq!(rt.state.doc.ghosts.len(), 1);
 
     right_click_target(&mut rt, 1);
     assert!(rt.state.menu.as_ref().unwrap().in_ghost);
-    choose(&mut rt, 1);
+    choose(&mut rt, 2);
     assert!(rt.state.doc.ghosts.is_empty(), "the same item revives");
 
     right_click_target(&mut rt, 1);
-    choose(&mut rt, 2);
+    choose(&mut rt, 3);
     assert!(!rt.state.edit.text.contains("lantern"));
     assert_eq!(rt.state.doc.overflow, "lantern");
     assert!(rt.find("overflow-field").is_some());
@@ -389,4 +389,17 @@ fn ghosts_and_overflow_survive_save_and_reload() {
     assert_eq!(back.doc.ghosts.len(), 1);
     assert_eq!(back.doc.overflow, "two");
     assert_eq!(back.overflow_edit.text, "two");
+}
+
+#[test]
+fn the_menu_asks_for_alternatives_on_the_word_under_the_pointer() {
+    let mut rt = runtime(crate::marked_sample());
+    let (provider, _feed) = crate::ai::fake();
+    rt.update(|s, _| s.provider = provider);
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    right_click_target(&mut rt, 1);
+    choose(&mut rt, 1);
+    assert_eq!(rt.state.pending.as_ref().unwrap().id, 1);
+    assert_eq!(rt.state.panel.as_ref().unwrap().rows.last().unwrap().text, "??");
 }

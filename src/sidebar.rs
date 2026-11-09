@@ -2,6 +2,7 @@
 
 use rune::{Key, KeyEvent, TextEdit, Tx};
 
+use crate::ai::alternatives::ASK;
 use crate::editor::Mode;
 use crate::model::{Alt, Level, Source, Target, TargetId};
 use crate::segment;
@@ -17,6 +18,8 @@ pub struct Panel {
     pub pos: usize,
     /// The document caret when the panel last looked, to notice a click in the page.
     pub caret: usize,
+    /// Why the last request for alternatives didn't work.
+    pub message: Option<String>,
 }
 
 fn is_blank(s: &str) -> bool {
@@ -75,13 +78,14 @@ impl State {
         let focus = rows.len() - 1;
         self.edit.focused = false;
         self.hover = None;
-        self.panel = Some(Panel { id, level: t.level, rows, focus, pos, caret: self.edit.focus });
+        self.panel = Some(Panel { id, level: t.level, rows, focus, pos, caret: self.edit.focus, message: None });
         self.focus_row(focus);
         self.touch();
     }
 
     /// Leaves the panel. Blank rows go, and so does a target left with nothing to swap to.
     pub fn close_panel(&mut self) {
+        self.stop_ai();
         let Some(panel) = self.panel.take() else { return };
         if let Some(i) = self.doc.targets.iter().position(|t| t.id == panel.id) {
             let t = &mut self.doc.targets[i];
@@ -135,7 +139,30 @@ impl State {
 
     /// Writes row `i` through to the alternative and the page.
     pub fn row_changed(&mut self, i: usize) {
+        if self.ask_from_row(i) {
+            return;
+        }
         self.with_undo(|s| s.apply_row(i));
+    }
+
+    /// `??` in a row you added asks for alternatives. The row stops being an alternative itself.
+    fn ask_from_row(&mut self, i: usize) -> bool {
+        let Some(panel) = &self.panel else { return false };
+        if i == 0 || panel.rows.get(i).is_none_or(|r| r.text.trim() != ASK) {
+            return false;
+        }
+        let id = panel.id;
+        self.with_undo(|s| {
+            let Some(t) = s.doc.targets.iter_mut().find(|t| t.id == id) else { return };
+            if i < t.alts.len() {
+                t.alts.remove(i);
+                let shown = t.active.min(t.alts.len() - 1);
+                let shown = if t.active == i { i - 1 } else { shown };
+                s.show_alt(id, shown);
+                s.fade = None;
+            }
+        });
+        self.ask_ai()
     }
 
     fn apply_row(&mut self, i: usize) {
@@ -202,6 +229,9 @@ impl State {
 
 /// Keys inside a row.
 pub fn row_key(s: &mut State, i: usize, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if ev.mods.ctrl && ev.mods.shift && matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("g")) {
+        return s.ask_ai();
+    }
     if ev.mods.cmd {
         // Undo inside a row undoes the row's own typing.
         if matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("z")) {

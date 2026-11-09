@@ -69,7 +69,7 @@ pub fn alternatives(s: &mut State, ctx: &MenuContext) {
 /// Mounts the menu into the window's top layer.
 pub fn mount(s: &State, layer: &mut Vec<El>) {
     let Some(ctx) = &s.menu else { return };
-    let (a, ghost, stash) = (ctx.clone(), ctx.range.clone(), ctx.range.clone());
+    let (a, asked, ghost, stash) = (ctx.clone(), ctx.clone(), ctx.range.clone(), ctx.range.clone());
     let trigger = el().w(0.0).h(0.0);
     let keep = context_menu("page", trigger, Some(ctx.point))
         .standard()
@@ -78,6 +78,11 @@ pub fn mount(s: &State, layer: &mut Vec<El>) {
         .item(MenuItem::new(format!("Alternatives for {}", subject(ctx))).shortcut("\u{2303}\u{21e7}A").on_select(move |s: &mut State| {
             s.menu = None;
             alternatives(s, &a);
+        }))
+        .item(MenuItem::new(format!("AI alternatives for {}", subject(ctx))).shortcut("\u{2303}\u{21e7}G").on_select(move |s: &mut State| {
+            s.menu = None;
+            alternatives(s, &asked);
+            s.ask_ai();
         }))
         .item(MenuItem::new(if ctx.in_ghost { "Revive it" } else { "Ghost it" }).shortcut("\u{2303}/").on_select(move |s: &mut State| {
             s.menu = None;

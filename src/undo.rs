@@ -74,11 +74,28 @@ impl State {
             t.alts.retain(|a| !a.text.trim().is_empty());
             t.active = active_text.and_then(|text| t.alts.iter().position(|a| a.text == text)).unwrap_or(0);
         }
+        self.doc.targets.retain(|t| t.alts.len() >= 2);
         self.doc.ghosts = lists.ghosts.clone();
         self.doc.text = self.edit.text.clone();
         self.hover = None;
         self.fade = None;
         self.touch();
+    }
+
+    /// Records a finished batch of AI alternatives as one change, whatever happened while it arrived.
+    pub fn record_batch(&mut self, id: TargetId, added: &[String]) {
+        if added.is_empty() {
+            return;
+        }
+        let after = self.lists();
+        let mut before = after.clone();
+        if let Some(t) = before.targets.iter_mut().find(|t| t.id == id) {
+            let shown = t.alts.get(t.active).map(|a| a.text.clone());
+            t.alts.retain(|a| !added.contains(&a.text) || Some(&a.text) == shown.as_ref());
+            t.active = shown.and_then(|text| t.alts.iter().position(|a| a.text == text)).unwrap_or(0);
+        }
+        let depth = self.edit.undo_depth();
+        self.history.undo.push(ListChange { before, after, depth_before: depth, depth_after: depth });
     }
 
     /// Applies saved lists if the field landed on their text. If it didn't, the ranges in them
