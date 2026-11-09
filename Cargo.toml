@@ -1,0 +1,21 @@
+[package]
+name = "alternate"
+version = "0.1.0"
+edition = "2024"
+description = "A native Mac writing app for trying different versions of a word, sentence or paragraph in place"
+
+[dependencies]
+rune = { git = "https://github.com/philmein23/rune", rev = "27d595bac58c5009601b5c9b739ba8276fb0cc49", features = ["native-file-dialog"] }
+rune-kit = { git = "https://github.com/philmein23/rune", rev = "27d595bac58c5009601b5c9b739ba8276fb0cc49" }
+rune-fx = { git = "https://github.com/philmein23/rune", rev = "27d595bac58c5009601b5c9b739ba8276fb0cc49" }
+rune-mac = { git = "https://github.com/philmein23/rune", rev = "27d595bac58c5009601b5c9b739ba8276fb0cc49" }
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "metal", "wgsl"] }
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+security-framework = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# Adds Cx::text_rects and Picked::text_index. See branch alternate-text-rects in this clone.
