@@ -8,6 +8,7 @@ use rune::{FileDialogOptions, Key, KeyEvent, TextEdit, Tx};
 use crate::file::{self, Problem};
 use crate::model::Doc;
 use crate::swap;
+use crate::undo;
 use crate::{Scene, State};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -56,12 +57,13 @@ impl State {
     pub fn with_doc(doc: Doc) -> State {
         let edit = TextEdit::new(doc.text.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new("") }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default() }
     }
 
     /// Takes in the field after a change.
     pub fn sync_field(&mut self) {
         if self.doc.sync_text(&self.edit.text, Some(self.edit.focus)).is_some() {
+            self.history.clear_redo();
             self.touch();
         }
     }
@@ -179,7 +181,7 @@ pub fn recovery_dir() -> Option<PathBuf> {
 
 /// Keys that act on the whole document. Runs before the field and when nothing is focused.
 pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if swap::handle_key(s, ev, tx) {
+    if swap::handle_key(s, ev, tx) || undo::handle_key(s, ev, tx) {
         return true;
     }
     let Key::Text(k) = &ev.key else { return false };

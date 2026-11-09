@@ -196,3 +196,33 @@ fn clicking_a_tab_changes_the_level() {
     click(&mut rt, "tab-sentence");
     assert_eq!(rt.state.panel.as_ref().unwrap().level, crate::model::Level::Sentence);
 }
+
+fn cmd(key: &str) -> KeyEvent {
+    KeyEvent { key: Key::Text(key.to_string()), mods: Mods { cmd: true, ..Mods::default() } }
+}
+
+#[test]
+fn delete_on_a_hovered_target_then_cmd_z_restores_text_and_list() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Backspace);
+    assert!(rt.state.edit.text.contains("the lamp was lit"), "{}", rt.state.edit.text);
+    assert_eq!(rt.state.doc.targets[0].alts.len(), 1);
+    rt.key(cmd("z"));
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.edit.text.contains("the lantern was lit"));
+    assert_eq!(rt.state.doc.targets[0].alts.len(), 2);
+}
+
+#[test]
+fn backspace_after_typing_deletes_text_even_on_a_target() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    press(&mut rt, Key::Text("x".to_string()));
+    let typed = rt.state.edit.text.clone();
+    press(&mut rt, Key::Backspace);
+    assert_eq!(rt.state.edit.text.len(), typed.len() - 1);
+    assert_eq!(rt.state.doc.targets[0].alts.len(), 2, "the alternatives are safe");
+}

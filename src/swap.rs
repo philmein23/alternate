@@ -86,7 +86,7 @@ impl State {
             return false;
         }
         let next = (t.active as i32 + dir).rem_euclid(n) as usize;
-        self.show_alt(id, next)
+        self.with_undo(|s| s.show_alt(id, next))
     }
 
     /// The smallest target under a point in the field's own coordinates.
@@ -105,20 +105,34 @@ impl State {
             return;
         }
         let hover = self.target_at(x, y).map(|id| Hover { id, armed: true });
-        if hover.map(|h| h.id) == self.hover.map(|h| h.id) {
+        let old = self.hover.map(|h| h.id);
+        if hover.map(|h| h.id) == old {
             tx.live_only();
+        } else if let Some(id) = old {
+            self.prune_target(id);
         }
         self.hover = hover;
     }
 
     pub fn pointer_left(&mut self) {
-        self.hover = None;
+        if let Some(h) = self.hover.take() {
+            self.prune_target(h.id);
+        }
     }
 }
 
 /// Arrows on an armed target swap it. Typing disarms it, so arrows go back to the caret.
 pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let plain = !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt && !ev.mods.shift;
+    if plain
+        && matches!(ev.key, Key::Backspace | Key::Delete)
+        && let Some(Hover { id, armed: true }) = s.hover
+        && s.panel.is_none()
+        && s.delete_alt(id)
+    {
+        tx.wake_after(Duration::ZERO);
+        return true;
+    }
     let dir = match &ev.key {
         Key::Left if plain => -1,
         Key::Right if plain => 1,

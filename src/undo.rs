@@ -19,6 +19,9 @@ struct Lists {
 pub struct ListChange {
     before: Lists,
     after: Lists,
+    /// The field's history position around the change, which says exactly which text step this is.
+    depth_before: usize,
+    depth_after: usize,
 }
 
 #[derive(Debug, Default)]
@@ -41,14 +44,20 @@ impl State {
     /// Runs a change to the lists so that undo can bring back what was there before it.
     pub fn with_undo<R>(&mut self, f: impl FnOnce(&mut State) -> R) -> R {
         let before = self.lists();
+        let depth_before = self.edit.undo_depth();
         let out = f(self);
         let after = self.lists();
         if before != after {
-            self.history.undo.push(ListChange { before, after });
+            let text_changed = before.text != after.text;
+            self.history.undo.push(ListChange { before, after, depth_before, depth_after: self.edit.undo_depth() });
             if self.history.undo.len() > LIMIT {
                 self.history.undo.remove(0);
             }
-            self.history.redo.clear();
+            // A change that leaves the text alone leaves the field's redo alone too, so the two
+            // histories have to keep the same steps.
+            if text_changed {
+                self.history.redo.clear();
+            }
         }
         out
     }
@@ -67,8 +76,19 @@ impl State {
         self.touch();
     }
 
+    /// Applies saved lists if the field landed on their text. If it didn't, the ranges in them
+    /// mean nothing, so the lists are moved to match the field instead.
+    fn settle(&mut self, lists: &Lists) {
+        debug_assert_eq!(self.edit.text, lists.text, "the field and the list history fell out of step");
+        if self.edit.text == lists.text {
+            self.restore(lists);
+        } else {
+            self.sync_after_history();
+        }
+    }
+
     pub fn undo(&mut self) {
-        let matches = self.history.undo.last().is_some_and(|c| c.after.text == self.edit.text);
+        let matches = self.history.undo.last().is_some_and(|c| c.depth_after == self.edit.undo_depth() && c.after.text == self.edit.text);
         if !matches {
             self.edit.undo();
             self.sync_after_history();
@@ -78,12 +98,12 @@ impl State {
         if change.before.text != change.after.text {
             self.edit.undo();
         }
-        self.restore(&change.before);
+        self.settle(&change.before);
         self.history.redo.push(change);
     }
 
     pub fn redo(&mut self) {
-        let matches = self.history.redo.last().is_some_and(|c| c.before.text == self.edit.text);
+        let matches = self.history.redo.last().is_some_and(|c| c.depth_before == self.edit.undo_depth() && c.before.text == self.edit.text);
         if !matches {
             self.edit.redo();
             self.sync_after_history();
@@ -93,7 +113,7 @@ impl State {
         if change.before.text != change.after.text {
             self.edit.redo();
         }
-        self.restore(&change.after);
+        self.settle(&change.after);
         self.history.undo.push(change);
     }
 

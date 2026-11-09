@@ -14,6 +14,7 @@ mod segment;
 mod sidebar;
 mod swap;
 mod ui;
+mod undo;
 
 #[cfg(test)]
 mod tests;
@@ -45,6 +46,7 @@ pub struct State {
     pub panel: Option<sidebar::Panel>,
     /// Answers a stale row binding after the panel closes.
     pub spare_edit: TextEdit,
+    pub history: undo::History,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]

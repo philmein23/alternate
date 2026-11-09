@@ -109,7 +109,7 @@ impl State {
         let end = panel.rows[i].text.len();
         panel.rows[i].set_selection(end, end);
         let id = panel.id;
-        self.preview_row(id, i);
+        self.with_undo(|s| s.preview_row(id, i));
     }
 
     /// Puts a row in the page, unless it's blank or already showing.
@@ -127,6 +127,10 @@ impl State {
 
     /// Writes row `i` through to the alternative and the page.
     pub fn row_changed(&mut self, i: usize) {
+        self.with_undo(|s| s.apply_row(i));
+    }
+
+    fn apply_row(&mut self, i: usize) {
         let Some(panel) = &mut self.panel else { return };
         let id = panel.id;
         let Some(text) = panel.rows.get(i).map(|r| r.text.clone()) else { return };
@@ -191,6 +195,10 @@ impl State {
 /// Keys inside a row.
 pub fn row_key(s: &mut State, i: usize, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.mods.cmd {
+        // Undo inside a row undoes the row's own typing.
+        if matches!(&ev.key, Key::Text(k) if k.eq_ignore_ascii_case("z")) {
+            return false;
+        }
         return crate::editor::handle_key(s, ev, tx);
     }
     let Some(panel) = &s.panel else { return false };
