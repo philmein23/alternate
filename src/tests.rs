@@ -1106,3 +1106,39 @@ fn command_shift_l_leaves_vim_normal_mode_alone() {
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.state.edit.focus, 0, "the caret stays put");
 }
+
+#[test]
+fn picking_a_paragraph_alternative_with_a_saved_word_inside_it_works() {
+    use crate::model::Level;
+    let mut s = State::with_doc(Doc::new("The cat sat. Then it left.\n\nSecond one here."));
+    s.edit.set_selection(5, 5);
+    assert!(s.open_panel());
+    s.panel.as_mut().unwrap().rows[1].text = "dog".to_string();
+    s.row_changed(1);
+    assert_eq!(s.doc.text, "The dog sat. Then it left.\n\nSecond one here.");
+    s.set_level(Level::Paragraph);
+    s.panel.as_mut().unwrap().rows[1].text = "A rewrite.".to_string();
+    s.row_changed(1);
+    assert_eq!(s.doc.text, "A rewrite.\n\nSecond one here.");
+    assert_eq!(s.edit.text, s.doc.text);
+    let t = &s.doc.targets[0];
+    assert_eq!(s.doc.text[t.range.clone()], t.alts[t.active].text);
+}
+
+#[test]
+fn removing_a_word_target_does_not_write_the_swap_onto_another_target() {
+    use crate::model::{Alt, Level, Source, Target};
+    let mut doc = Doc::new("the cat sat\n\nthe mat");
+    for (range, level, alts) in [(4..7, Level::Word, ["cat", "dog"]), (0..11, Level::Paragraph, ["the cat sat", "it sat"]), (17..20, Level::Word, ["mat", "rug"])] {
+        let id = doc.next_id();
+        doc.targets.push(Target { id, range: range.clone(), level, original: alts[0].to_string(), alts: alts.iter().map(|a| Alt { text: a.to_string(), source: Source::Mine }).collect(), active: 0 });
+    }
+    let mut s = State::with_doc(doc);
+    assert!(s.show_alt(2, 1));
+    assert_eq!(s.doc.text, "it sat\n\nthe mat");
+    assert_eq!(s.doc.targets.iter().map(|t| t.id).collect::<Vec<_>>(), [2, 3]);
+    for t in &s.doc.targets {
+        assert_eq!(s.doc.text[t.range.clone()], t.alts[t.active].text, "target {}", t.id);
+    }
+    assert_eq!(s.doc.targets[1].active, 0);
+}
