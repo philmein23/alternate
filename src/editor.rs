@@ -3,12 +3,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rune::{FileDialogOptions, Key, KeyEvent, TextEdit, Tx};
+use rune::{FileDialogOptions, KeyEvent, TextEdit, Tx};
 
 use crate::file::{self, Problem};
 use crate::model::Doc;
+use crate::shortcuts;
 use crate::swap;
-use crate::undo;
 use crate::{Scene, State};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -58,7 +58,7 @@ impl State {
         let edit = TextEdit::new(doc.text.clone());
         let overflow_edit = TextEdit::new(doc.overflow.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default(), review: None }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default(), review: None, help_open: false, dim: 0.0, dim_at: None, still: Default::default() }
     }
 
     /// Takes in the field after a change.
@@ -184,32 +184,10 @@ pub fn recovery_dir() -> Option<PathBuf> {
 
 /// Keys that act on the whole document. Runs before the field and when nothing is focused.
 pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if swap::handle_key(s, ev, tx) || undo::handle_key(s, ev, tx) {
+    if swap::handle_key(s, ev, tx) {
         return true;
     }
-    let Key::Text(k) = &ev.key else { return false };
-    if ev.mods.ctrl && ev.mods.shift && k.eq_ignore_ascii_case("a") {
-        return s.open_panel();
-    }
-    if ev.mods.ctrl && ev.mods.shift && k.eq_ignore_ascii_case("g") {
-        return s.open_panel() && s.ask_ai();
-    }
-    if ev.mods.ctrl && k == "/" {
-        return s.caret_range().map(|r| s.toggle_ghost(r)).is_some();
-    }
-    if ev.mods.ctrl && ev.mods.shift && k.eq_ignore_ascii_case("x") {
-        return s.caret_range().map(|r| s.stash(r)).is_some();
-    }
-    if !ev.mods.cmd {
-        return false;
-    }
-    match (k.as_str(), ev.mods.shift) {
-        ("s", false) => s.save(tx),
-        ("s", true) | ("S", true) => s.save_as(tx),
-        ("o", false) => s.open(tx),
-        _ => return false,
-    }
-    true
+    shortcuts::find(ev).is_some_and(|action| shortcuts::run(s, action, tx))
 }
 
 #[cfg(test)]

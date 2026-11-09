@@ -1,6 +1,6 @@
 //! The left panel.
 
-use rune::{El, Shape, TextStyle, canvas, col, row, text, text_input};
+use rune::{Edge, El, Shape, Spring, TextStyle, Transition, canvas, col, row, text, text_input};
 
 use crate::model::{Level, Source};
 use crate::sidebar::{self, Panel};
@@ -37,7 +37,8 @@ fn row_style() -> TextStyle {
 
 /// The robot, hopping while it waits.
 fn dancing_robot(s: &State) -> El {
-    robot().offset(0.0, (s.dance_now as f32 * 10.0).sin() * 2.5)
+    let hop = if s.still.get() { 0.0 } else { (s.dance_now as f32 * 10.0).sin() * 2.5 };
+    robot().offset(0.0, hop)
 }
 
 fn alt_row(s: &State, panel: &Panel, i: usize) -> El {
@@ -61,6 +62,7 @@ fn alt_row(s: &State, panel: &Panel, i: usize) -> El {
         .selection_color(THEME.accent.alpha(0.3))
         .color(if on { THEME.ink.color() } else { THEME.faint.color() })
         .key(format!("row-{i}"))
+        .wrap_anywhere()
         .w_full();
     row().w_full().gap(8.0).child(mark).child(col().grow(1.0).min_w(0.0).child(field))
 }
@@ -75,5 +77,5 @@ pub fn view(s: &State) -> Option<El> {
     if let Some(message) = &panel.message {
         card = card.child(text(message.clone()).font(theme::small()).color(THEME.marker.color()).wrap().key("panel-message"));
     }
-    Some(card.child(footer).key("panel"))
+    Some(card.child(footer).key("panel").transition(Transition::move_edge(Edge::Leading)).motion(Spring::new(0.28, 0.0)))
 }

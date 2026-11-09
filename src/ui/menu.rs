@@ -7,6 +7,7 @@ use rune_kit::{MenuItem, context_menu};
 
 use crate::State;
 use crate::segment;
+use crate::shortcuts::{Action, keys};
 
 #[derive(Clone, Debug)]
 pub struct MenuContext {
@@ -75,20 +76,20 @@ pub fn mount(s: &State, layer: &mut Vec<El>) {
         .standard()
         .min_width(260.0)
         .on_close(|s: &mut State| s.menu = None)
-        .item(MenuItem::new(format!("Alternatives for {}", subject(ctx))).shortcut("\u{2303}\u{21e7}A").on_select(move |s: &mut State| {
+        .item(MenuItem::new(format!("Alternatives for {}", subject(ctx))).shortcut(keys(Action::Alternatives)).on_select(move |s: &mut State| {
             s.menu = None;
             alternatives(s, &a);
         }))
-        .item(MenuItem::new(format!("AI alternatives for {}", subject(ctx))).shortcut("\u{2303}\u{21e7}G").on_select(move |s: &mut State| {
+        .item(MenuItem::new(format!("AI alternatives for {}", subject(ctx))).shortcut(keys(Action::AiAlternatives)).on_select(move |s: &mut State| {
             s.menu = None;
             alternatives(s, &asked);
             s.ask_ai();
         }))
-        .item(MenuItem::new(if ctx.in_ghost { "Revive it" } else { "Ghost it" }).shortcut("\u{2303}/").on_select(move |s: &mut State| {
+        .item(MenuItem::new(if ctx.in_ghost { "Revive it" } else { "Ghost it" }).shortcut(keys(Action::Ghost)).on_select(move |s: &mut State| {
             s.menu = None;
             s.toggle_ghost(ghost.clone());
         }))
-        .item(MenuItem::new("Stash this in Overflow").shortcut("\u{2303}\u{21e7}X").on_select(move |s: &mut State| {
+        .item(MenuItem::new("Stash this in Overflow").shortcut(keys(Action::Stash)).on_select(move |s: &mut State| {
             s.menu = None;
             s.stash(stash.clone());
         }))

@@ -20,6 +20,13 @@ pub fn click<S: 'static>(rt: &mut Runtime<S>, key: &str) {
     rt.frame(1.0 / 60.0);
 }
 
+/// Runs frames until entering panels have finished moving.
+fn settle<S: 'static>(rt: &mut Runtime<S>) {
+    for _ in 0..90 {
+        rt.frame(1.0 / 60.0);
+    }
+}
+
 pub fn press<S: 'static>(rt: &mut Runtime<S>, key: Key) {
     rt.key(KeyEvent { key, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
@@ -193,6 +200,7 @@ fn clicking_a_tab_changes_the_level() {
     });
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
+    settle(&mut rt);
     click(&mut rt, "tab-sentence");
     assert_eq!(rt.state.panel.as_ref().unwrap().level, crate::model::Level::Sentence);
 }
@@ -352,8 +360,7 @@ fn dragging_the_grip_onto_the_page_inserts_there() {
         s.set_overflow("spare".to_string());
         s.overflow_open = true;
     });
-    rt.frame(1.0 / 60.0);
-    rt.frame(1.0 / 60.0);
+    settle(&mut rt);
     let before = rt.state.edit.text.len();
     let (gx, gy) = rt.find("overflow-grip").unwrap();
     let (fx, fy) = field_origin(&rt);
@@ -428,4 +435,113 @@ fn clicking_a_faded_run_keeps_it_and_the_bar_makes_the_cuts() {
     assert!(rt.state.edit.text.contains("nobody on the"));
     assert!(!rt.state.edit.text.contains("along the quay"));
     assert_eq!(rt.state.edit.text, rt.state.doc.text);
+}
+
+fn worst_docs() -> Vec<(&'static str, State)> {
+    let para = "The tide came in slowly over the flats. ".repeat(180);
+    let big: String = (0..50_000 / 40).map(|_| format!("{}\n\n", "word another longer thing ".repeat(10))).collect();
+    let mut many = Doc::new("alpha beta gamma delta ".repeat(100));
+    let mut at = 0;
+    for _ in 0..200 {
+        let id = many.next_id();
+        let end = at + many.text[at..].find(' ').unwrap();
+        let word = many.text[at..end].to_string();
+        many.targets.push(crate::model::Target { id, range: at..end, level: crate::model::Level::Word, original: word.clone(), alts: vec![crate::model::Alt { text: word, source: crate::model::Source::Mine }, crate::model::Alt { text: "x".to_string(), source: crate::model::Source::Mine }], active: 0 });
+        at = end + 1;
+    }
+    let mixed = format!("Emoji \u{1f600}\u{1f469}\u{200d}\u{1f4bb} here. \u{5e9}\u{5dc}\u{5d5}\u{5dd} \u{5e2}\u{5d5}\u{5dc}\u{5dd}. \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{7ae0}\u{3067}\u{3059}\u{3002}\n\nhttps://example.com/{}", "averyveryverylongpathsegment".repeat(40));
+    vec![("50k words", State::with_doc(Doc::new(big))), ("one paragraph", State::with_doc(Doc::new(para))), ("200 targets", State::with_doc(many)), ("mixed scripts", State::with_doc(Doc::new(mixed)))]
+}
+
+/// Every worst case opens, takes typing, swaps and panel use without losing step.
+#[test]
+fn worst_case_documents_survive_use() {
+    for (name, s) in worst_docs() {
+        let mut rt = runtime(s);
+        rt.update(|s, _| {
+            s.mode = Mode::Active;
+            s.edit.focused = true;
+        });
+        rt.frame(1.0 / 60.0);
+        let before = rt.state.edit.text.clone();
+        press(&mut rt, Key::Text("x".to_string()));
+        assert_eq!(rt.state.edit.text.len(), before.len() + 1, "{name}");
+        press(&mut rt, Key::Backspace);
+        rt.update(|s, _| {
+            s.edit.set_selection(0, 0);
+            s.open_panel();
+            s.close_panel();
+        });
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.edit.text, rt.state.doc.text, "{name}");
+        for t in &rt.state.doc.targets {
+            assert_eq!(rt.state.doc.text[t.range.clone()], t.alts[t.active].text, "{name}");
+        }
+    }
+}
+
+/// Run with `cargo test --release keystroke_cost -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn keystroke_cost() {
+    for (name, s) in worst_docs() {
+        let mut rt = runtime(s);
+        rt.update(|s, _| {
+            s.mode = Mode::Active;
+            s.edit.focused = true;
+        });
+        rt.frame(1.0 / 60.0);
+        let mut times = Vec::new();
+        for i in 0..40 {
+            let start = std::time::Instant::now();
+            rt.key(KeyEvent { key: Key::Text(if i % 2 == 0 { "x" } else { "y" }.to_string()), mods: Mods::default() });
+            rt.frame(1.0 / 60.0);
+            times.push(start.elapsed().as_secs_f32() * 1000.0);
+        }
+        times.sort_by(f32::total_cmp);
+        eprintln!("{name}: keystroke p50 {:.2} ms, p95 {:.2} ms", times[20], times[37]);
+    }
+}
+
+#[test]
+fn reduce_motion_skips_the_explosion_and_the_swap_fade() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "doc");
+    hover_target(&mut rt, 1);
+    rt.update(|s, _| s.still.set(true));
+    rt.state.still.set(true);
+    rt.key(KeyEvent { key: Key::Right, mods: Mods::default() });
+    assert!(rt.state.fade.is_none());
+    rt.key(KeyEvent { key: Key::Backspace, mods: Mods::default() });
+    assert!(rt.state.bursts.is_empty());
+}
+
+#[test]
+fn opening_the_panel_eases_the_page_down_and_closing_eases_it_back() {
+    let mut s = State::with_doc(Doc::new("one two"));
+    let mut tx = rune::Tx::default();
+    s.edit.set_selection(1, 1);
+    s.open_panel();
+    crate::poll(&mut s, 0.0, &mut tx);
+    crate::poll(&mut s, 0.05, &mut tx);
+    assert!(s.dim > 0.0 && s.dim < 1.0, "{}", s.dim);
+    crate::poll(&mut s, 1.0, &mut tx);
+    assert_eq!(s.dim, 1.0);
+    s.close_panel();
+    crate::poll(&mut s, 1.01, &mut tx);
+    crate::poll(&mut s, 2.0, &mut tx);
+    assert_eq!(s.dim, 0.0);
+}
+
+#[test]
+fn the_help_lists_every_shortcut() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "toggle-help");
+    assert!(rt.find("help").is_some());
+}
+
+#[test]
+fn an_empty_first_launch_shows_where_to_start() {
+    let rt = runtime(State::with_doc(Doc::default()));
+    assert!(rt.find("first-hint").is_some());
 }

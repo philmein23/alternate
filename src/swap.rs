@@ -75,7 +75,7 @@ impl State {
         }
         let carry = |p: usize| edits.iter().fold(p, |p, e| carried(p, *e));
         self.edit.set_selection(carry(anchor), carry(focus));
-        self.fade = self.doc.targets.iter().find(|t| t.id == id).map(|t| Fade { range: t.range.clone(), started: None });
+        self.fade = self.doc.targets.iter().find(|t| t.id == id).filter(|_| !self.still.get()).map(|t| Fade { range: t.range.clone(), started: None });
         self.touch();
         true
     }
@@ -136,7 +136,9 @@ pub fn handle_key(s: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     {
         let rect = s.hit.borrow().iter().find(|(i, _)| *i == id).and_then(|(_, b)| b.first().copied());
         if s.delete_alt(id) {
-            s.bursts.extend(rect.map(|rect| Burst { rect, started: None }));
+            if !s.still.get() {
+                s.bursts.extend(rect.map(|rect| Burst { rect, started: None }));
+            }
             tx.wake_after(Duration::ZERO);
             return true;
         }

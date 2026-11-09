@@ -1,8 +1,6 @@
 //! One undo for text and alternatives together. The field keeps its own text history. Beside it, a
 //! stack remembers what the lists looked like around each change, tied to the text after that change.
 
-use rune::{Key, KeyEvent, Tx};
-
 use crate::model::{Ghost, Target, TargetId};
 use crate::State;
 
@@ -169,19 +167,6 @@ impl State {
         self.doc.targets.retain(|t| t.id != id || t.alts.len() >= 2);
         self.touch();
     }
-}
-
-pub fn handle_key(s: &mut State, ev: &KeyEvent, _tx: &mut Tx) -> bool {
-    let Key::Text(k) = &ev.key else { return false };
-    if !ev.mods.cmd || !k.eq_ignore_ascii_case("z") || s.panel.is_some() {
-        return false;
-    }
-    if ev.mods.shift {
-        s.redo();
-    } else {
-        s.undo();
-    }
-    true
 }
 
 #[cfg(test)]

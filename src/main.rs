@@ -3,18 +3,15 @@
 mod ai;
 mod article;
 mod editor;
-#[allow(dead_code)] // Grows into use as the features arrive.
 mod file;
 mod fonts;
 mod ghost;
 mod lab;
-#[allow(dead_code)]
 mod model;
 mod overflow;
-#[allow(dead_code)]
 mod rebase;
-#[allow(dead_code)]
 mod segment;
+mod shortcuts;
 mod sidebar;
 mod sound;
 mod swap;
@@ -26,7 +23,7 @@ mod tests;
 
 use std::cell::RefCell;
 
-use rune::{AppSpec, Chrome, Cx, El, ScrollSpec, TextEdit, Tx, col, row, text_input};
+use rune::{AppSpec, Chrome, Cx, El, ScrollSpec, TextEdit, Tx, col, row, text, text_input};
 
 use editor::{FileState, Mode};
 use model::Doc;
@@ -67,6 +64,12 @@ pub struct State {
     pub demo_asking: bool,
     pub lab: lab::Lab,
     pub review: Option<lab::trim::Review>,
+    pub help_open: bool,
+    /// How dimmed the page is, from 0 to 1.
+    pub dim: f32,
+    dim_at: Option<f64>,
+    /// The system's Reduce Motion setting, as of the last view.
+    pub still: std::cell::Cell<bool>,
     pub lab_hit: RefCell<Vec<Vec<[f32; 4]>>>,
 }
 
@@ -125,6 +128,28 @@ fn edited_scene(s: &mut State) {
     s.sync_field();
 }
 
+/// Moves the page's dimming towards where the panel wants it.
+fn ease_dim(s: &mut State, now: f64, tx: &mut Tx) -> bool {
+    let target = if s.panel.is_some() { 1.0 } else { 0.0 };
+    if s.dim == target {
+        s.dim_at = None;
+        return false;
+    }
+    let step = (now - s.dim_at.unwrap_or(now)) as f32 / theme::SWAP_FADE;
+    s.dim_at = Some(now);
+    s.dim = if s.still.get() { target } else { (s.dim + step.copysign(target - s.dim)).clamp(s.dim.min(target), s.dim.max(target)) };
+    tx.wake_after(std::time::Duration::from_millis(8));
+    true
+}
+
+fn worst_scene(text: String) -> State {
+    let mut s = State::with_doc(Doc::new(text));
+    s.mode = Mode::Active;
+    let end = s.doc.text.char_indices().nth(5).map_or(0, |(i, _)| i);
+    s.doc.add_ghost(0..end);
+    s
+}
+
 fn page(s: &State, cx: &mut Cx<State>) -> El {
     let style = theme::body();
     let field = text_input(&s.edit, style)
@@ -143,8 +168,9 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
         .selection_color(THEME.accent.alpha(0.3))
         .placeholder("Start writing.", THEME.faint.color())
         .key("doc")
+        .wrap_anywhere()
         .w_full()
-        .color(if s.panel.is_some() { THEME.ink.alpha(THEME.dimmed) } else { THEME.ink.color() });
+        .color(THEME.ink.alpha(1.0 - (1.0 - THEME.dimmed) * s.dim));
     // A bare field in a wrapper that grows with it: the page scrolls, not the field.
     let mut grown = col().w_full().min_w(0.0).min_h(style.line_px()).child(field.animate_edit_layout());
     ui::lab::read_rects(s, cx);
@@ -161,10 +187,11 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
 }
 
 pub fn view(s: &State, cx: &mut Cx<State>) -> El {
+    s.still.set(cx.is_reduced_motion());
     if s.scene == Scene::Palette {
         return ui::palette_scene::view(s);
     }
-    let scroller = col().w_full().h_full().key("scroller").scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(48.0).items_center().child(page(s, cx));
+    let scroller = col().w_full().h_full().key("scroller").scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(84.0).items_center().child(page(s, cx));
     let top = row().px(96.0).pt(18.0).child(ui::chrome::count(s)).pin(Some(0.0), Some(0.0), None, None);
     let mut bottom = row().gap(24.0).w_full().px(20.0).pb(16.0).items_center();
     if let Some(files) = ui::chrome::file_controls(s) {
@@ -179,12 +206,20 @@ pub fn view(s: &State, cx: &mut Cx<State>) -> El {
     }
     let centre = ui::chrome::marks_toggle(s).map(|t| row().w_full().pt(18.0).justify_center().child(t).pin(Some(0.0), Some(0.0), Some(0.0), None));
     let mut main = col().grow(1.0).min_w(0.0).h_full().child(scroller).child(top);
+    if s.doc.text.is_empty() && s.mode == Mode::Plain {
+        let hint = text("Click the word count for alternatives, marks and the Lab.".to_string()).font(theme::small()).color(THEME.faint.color()).key("first-hint");
+        main = main.child(row().w_full().justify_center().pb(20.0).child(hint).pin(Some(0.0), None, Some(0.0), Some(0.0)));
+    }
     if let Some(centre) = centre {
         main = main.child(centre);
     }
     let main = main.child(bottom.pin(Some(0.0), None, Some(0.0), Some(0.0)));
     let main = match ui::lab::dock(s) {
         Some(dock) => main.child(dock),
+        None => main,
+    };
+    let main = match ui::help::view(s) {
+        Some(help) => main.child(help),
         None => main,
     };
     let root = row().w_full().h_full().fill(THEME.page.color());
@@ -208,7 +243,8 @@ fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     let asking = ai::alternatives::poll(s, now, tx);
     let reading = lab::poll(s, tx);
     let trimming = lab::trim::poll(s, tx);
-    s.track_panel() || fading || burning || asking || reading || trimming
+    let easing = ease_dim(s, now, tx);
+    s.track_panel() || fading || burning || asking || reading || trimming || easing
 }
 
 fn on_close(s: &mut State, _tx: &mut Tx) {
@@ -241,7 +277,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("review", |s| { *s = marked_sample(); let text = s.doc.text.clone(); let cuts = ["before the lantern was lit, and ", "as if it had only stopped for a moment", "stopping, and "].iter().map(|q| { let at = text.find(q).unwrap(); lab::trim::Cut { range: at..at + q.len(), kept: false, fix: None } }).collect(); s.review = Some(lab::trim::Review::new(lab::trim::Kind::Trim(lab::trim::Level::More), cuts, text)); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("review", |s| { *s = marked_sample(); let text = s.doc.text.clone(); let cuts = ["before the lantern was lit, and ", "as if it had only stopped for a moment", "stopping, and "].iter().map(|q| { let at = text.find(q).unwrap(); lab::trim::Cut { range: at..at + q.len(), kept: false, fix: None } }).collect(); s.review = Some(lab::trim::Review::new(lab::trim::Kind::Trim(lab::trim::Level::More), cuts, text)); }), ("worst-para", |s| *s = worst_scene("The tide came in slowly over the flats. ".repeat(60))), ("worst-mixed", |s| *s = worst_scene(format!("Emoji \u{1f600}\u{1f469}\u{200d}\u{1f4bb} here. \u{5e9}\u{5dc}\u{5d5}\u{5dd} \u{5e2}\u{5d5}\u{5dc}\u{5dd}. \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}\u{7ae0}\u{3067}\u{3059}\u{3002}\n\nhttps://example.com/{}", "averyveryverylongpathsegment".repeat(40)))), ("help", |s| { *s = marked_sample(); s.help_open = true; }), ("first", |s| *s = State::with_doc(Doc::default())), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),

@@ -1,6 +1,6 @@
 //! The LAB button, its popover, and the tinted marks a pass leaves.
 
-use rune::{Color, Cx, El, TextHighlight, col, row, text};
+use rune::{Color, Cx, El, TextHighlight, Transition, col, row, text};
 
 use crate::State;
 use crate::lab::trim::{Kind, LEVELS, Level};
@@ -85,7 +85,7 @@ pub fn dock(s: &State) -> Option<El> {
     let reason = s.lab.hover.and_then(|i| s.doc.marks.get(i)).filter(|m| !m.reason.is_empty());
     let mut column = col().w_full().items_center().gap(8.0).pb(12.0);
     if s.lab.open {
-        column = column.child(popover(s));
+        column = column.child(popover(s).transition(Transition::opacity()));
     }
     if let Some(bar) = crate::ui::review::bar(s) {
         column = column.child(bar);
