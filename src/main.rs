@@ -1,6 +1,10 @@
 //! Alternate. `cargo run` opens the app, `cargo run -- --snap out.png --scene empty` renders headless.
 
 mod fonts;
+#[allow(dead_code)] // Used from phase 7 on.
+mod model;
+#[allow(dead_code)]
+mod rebase;
 
 #[cfg(test)]
 mod tests;
