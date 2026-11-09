@@ -19,5 +19,7 @@ pub fn spans(s: &State) -> Vec<Span> {
 
 pub fn highlights(s: &State) -> Vec<TextHighlight> {
     let hovered = s.hover.filter(|_| s.mode == Mode::Active).and_then(|h| s.doc.targets.iter().find(|t| t.id == h.id));
-    hovered.map(|t| TextHighlight::new(t.range.clone(), THEME.accent.alpha(0.16))).into_iter().collect()
+    let mut out: Vec<TextHighlight> = hovered.map(|t| TextHighlight::new(t.range.clone(), THEME.accent.alpha(0.16))).into_iter().collect();
+    out.extend(crate::ui::lab::highlights(s));
+    out
 }

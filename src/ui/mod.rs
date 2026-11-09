@@ -1,5 +1,6 @@
 pub mod chrome;
 pub mod fx;
+pub mod lab;
 pub mod marks;
 pub mod menu;
 pub mod overflow;

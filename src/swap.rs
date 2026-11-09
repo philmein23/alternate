@@ -108,7 +108,10 @@ impl State {
         }
         let hover = self.target_at(x, y).map(|id| Hover { id, armed: true });
         let old = self.hover.map(|h| h.id);
-        if hover.map(|h| h.id) == old {
+        let lab = self.mark_at(x, y);
+        let same_mark = lab == self.lab.hover;
+        self.lab.hover = lab;
+        if hover.map(|h| h.id) == old && same_mark {
             tx.live_only();
         } else if let Some(id) = old {
             self.prune_target(id);

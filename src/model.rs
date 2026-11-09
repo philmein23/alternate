@@ -53,8 +53,18 @@ pub struct Ghost {
     pub range: Range<usize>,
 }
 
+/// A place a Lab pass pointed at.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LabMark {
+    pub range: Range<usize>,
+    pub reason: String,
+    pub pass: crate::lab::Pass,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Doc {
+    /// Where the last Lab pass pointed. Follows edits, and isn't saved.
+    pub marks: Vec<LabMark>,
     pub text: String,
     pub targets: Vec<Target>,
     pub ghosts: Vec<Ghost>,
@@ -109,6 +119,13 @@ impl Doc {
             true
         });
         self.ghosts = merged(self.ghosts.iter().filter_map(|g| rebase::rebase(g.range.clone(), edit)).collect());
+        self.marks.retain_mut(|m| match rebase::rebase(m.range.clone(), edit) {
+            Some(range) => {
+                m.range = range;
+                true
+            }
+            None => false,
+        });
     }
 
     /// Fades `range`, joining any ghost it touches.

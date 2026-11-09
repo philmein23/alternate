@@ -76,6 +76,9 @@ impl State {
         }
         self.doc.targets.retain(|t| t.alts.len() >= 2);
         self.doc.ghosts = lists.ghosts.clone();
+        if self.doc.text != self.edit.text {
+            self.doc.marks.clear();
+        }
         self.doc.text = self.edit.text.clone();
         self.hover = None;
         self.fade = None;
