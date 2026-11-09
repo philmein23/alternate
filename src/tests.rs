@@ -66,3 +66,40 @@ fn the_wheel_scrolls_the_whole_page() {
     let (_, after) = rt.find("doc").unwrap();
     assert!(after < before - 300.0, "the document moved up: {before} to {after}");
 }
+
+fn forty_target_doc() -> State {
+    use crate::model::{Alt, Level, Source, Target};
+    let body = "Some words to mark along this line of writing here. ".repeat(40);
+    let mut doc = Doc::new(body.clone());
+    for (i, (start, _)) in body.match_indices("words").enumerate() {
+        let id = doc.next_id();
+        doc.targets.push(Target { id, range: start..start + 5, level: if i % 2 == 0 { Level::Word } else { Level::Sentence }, original: "words".into(), alts: vec![Alt { text: "words".into(), source: Source::Mine }], active: 0 });
+    }
+    let mut s = State::with_doc(doc);
+    s.mode = Mode::Active;
+    s
+}
+
+#[test]
+fn forty_marks_stay_cheap_while_typing() {
+    let mut rt = runtime(forty_target_doc());
+    assert_eq!(rt.state.doc.targets.len(), 40);
+    click(&mut rt, "doc");
+    let start = std::time::Instant::now();
+    for _ in 0..60 {
+        press(&mut rt, Key::Text("x".to_string()));
+    }
+    let per_key = start.elapsed().as_secs_f64() * 1000.0 / 60.0;
+    eprintln!("forty marks: {per_key:.2} ms per keystroke");
+    assert!(per_key < 16.0, "{per_key:.2} ms per keystroke");
+    assert_eq!(rt.state.doc.targets.len(), 40);
+}
+
+#[test]
+fn the_dots_button_hides_the_marks_and_keeps_the_alternatives() {
+    let mut rt = runtime(crate::marked_sample());
+    assert!(rt.find("marks").is_some());
+    click(&mut rt, "toggle-marks");
+    assert!(rt.find("marks").is_none());
+    assert_eq!(rt.state.doc.targets.len(), 4);
+}

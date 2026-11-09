@@ -55,7 +55,7 @@ impl State {
     pub fn with_doc(doc: Doc) -> State {
         let edit = TextEdit::new(doc.text.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, scene: Scene::App }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App }
     }
 
     /// Takes in the field after a change.

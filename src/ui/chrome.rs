@@ -20,6 +20,12 @@ pub fn file_controls(s: &State) -> Option<El> {
     (s.mode == Mode::Active).then(|| row().gap(16.0).child(control("Save", "save", |s, tx| s.save(tx))).child(control("Open", "open", |s, tx| s.open(tx))))
 }
 
+/// Hides the marks so the page can be read clean. The alternatives stay.
+pub fn marks_toggle(s: &State) -> Option<El> {
+    let label = if s.marks_hidden { "· · · show marks" } else { "· · ·" };
+    (s.mode == Mode::Active).then(|| control(label, "toggle-marks", |s, _| s.marks_hidden = !s.marks_hidden))
+}
+
 pub fn notice(s: &State) -> Option<El> {
     s.file.notice.as_ref().map(|n| text(n.clone()).font(theme::small()).color(THEME.marker.color()).key("notice"))
 }
