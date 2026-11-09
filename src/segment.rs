@@ -104,7 +104,7 @@ fn is_abbreviation(text: &str, at: usize) -> bool {
     matches!((letters.next(), letters.next()), (Some(c), None) if c.is_uppercase())
 }
 
-/// Where the sentence ends if the character before `after` closes one, skipping closing quotes.
+/// Where the sentence ends if the terminator at `term` closes one, skipping closing quotes.
 fn sentence_end(text: &str, term: usize, term_char: char, limit: usize) -> Option<usize> {
     let mut end = term + term_char.len_utf8();
     while end < limit && text[end..].chars().next().is_some_and(|c| CLOSERS.contains(&c) || matches!(c, '.' | '!' | '?' | '…')) {
@@ -116,15 +116,14 @@ fn sentence_end(text: &str, term: usize, term_char: char, limit: usize) -> Optio
     if end < limit && !text[end..].chars().next().is_some_and(char::is_whitespace) {
         return None;
     }
-    if term_char == '.' {
-        if is_abbreviation(text, term) {
-            return None;
-        }
-        // A lowercase word next means the sentence carries on, as after "etc." mid-sentence.
-        let next = text[end..limit].trim_start().chars().next();
-        if next.is_some_and(char::is_lowercase) {
-            return None;
-        }
+    if term_char == '.' && is_abbreviation(text, term) {
+        return None;
+    }
+    // A lowercase word next means the sentence carries on, as after "etc." or a quoted question.
+    let quoted = end > term + term_char.len_utf8();
+    let next = text[end..limit].trim_start().chars().next();
+    if (term_char == '.' || quoted) && next.is_some_and(char::is_lowercase) {
+        return None;
     }
     Some(end)
 }
@@ -143,7 +142,7 @@ pub fn sentences_in(text: &str, para: Range<usize>) -> Vec<Range<usize>> {
         let Some(end) = sentence_end(text, at, c, limit) else { continue };
         out.push(trimmed(text, start..end));
         start = end;
-        while iter.as_str().len() + para.start + i + c.len_utf8() < limit && para.start + iter.offset() < end {
+        while para.start + iter.offset() < end {
             iter.next();
         }
     }

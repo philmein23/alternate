@@ -8,6 +8,8 @@ mod fonts;
 mod model;
 #[allow(dead_code)]
 mod rebase;
+#[allow(dead_code)]
+mod segment;
 mod ui;
 
 #[cfg(test)]
