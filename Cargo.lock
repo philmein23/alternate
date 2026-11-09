@@ -114,6 +114,8 @@ dependencies = [
  "rune-fx",
  "rune-kit",
  "rune-mac",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

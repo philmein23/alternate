@@ -2,11 +2,14 @@
 
 use std::ops::Range;
 
+use serde::{Deserialize, Serialize};
+
 use crate::rebase::{self, Edit};
 
 pub type TargetId = u64;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Level {
     Word,
     Sentence,
