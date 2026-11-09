@@ -1054,3 +1054,55 @@ fn command_n_returns_vim_to_insert() {
     press(&mut rt, Key::Text("h".to_string()));
     assert_eq!(rt.state.edit.text, "h");
 }
+
+#[test]
+fn opening_warns_once_before_replacing_unsaved_writing() {
+    let mut rt = runtime(State::with_doc(Doc::default()));
+    click(&mut rt, "doc");
+    press(&mut rt, Key::Text("a".to_string()));
+    rt.key(chord("o", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "a");
+    assert!(rt.state.file.notice.as_ref().unwrap().contains("\u{2318}O again"));
+    assert!(rt.state.file.discard.as_ref().is_some_and(|(key, _)| *key == 'O'));
+}
+
+#[test]
+fn a_warning_only_counts_for_the_key_and_writing_it_was_for() {
+    let mut s = State::with_doc(Doc::new("draft"));
+    s.file.dirty = true;
+    assert!(!s.confirm_discard('O'));
+    assert!(!s.confirm_discard('N'), "another key warns again");
+    assert!(s.confirm_discard('N'));
+    s.file.dirty = false;
+    assert!(s.confirm_discard('O'), "saved writing needs no warning");
+}
+
+#[test]
+fn loading_a_file_closes_what_was_open_on_the_old_document() {
+    let mut s = crate::marked_sample();
+    s.edit.set_selection(30, 30);
+    s.open_panel();
+    assert!(s.panel.is_some());
+    s.load_file(std::path::Path::new("x.md"), "new text");
+    assert!(s.panel.is_none());
+    assert_eq!(s.edit.text, "new text");
+}
+
+#[test]
+fn command_shift_l_selects_the_whole_page() {
+    let mut rt = runtime(State::with_doc(Doc::new("two words")));
+    click(&mut rt, "doc");
+    rt.key(chord("l", true));
+    rt.frame(1.0 / 60.0);
+    press(&mut rt, Key::Text("x".to_string()));
+    assert_eq!(rt.state.edit.text, "x");
+}
+
+#[test]
+fn command_shift_l_leaves_vim_normal_mode_alone() {
+    let mut rt = vim_runtime("two words", 0);
+    rt.key(chord("l", true));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.focus, 0, "the caret stays put");
+}
