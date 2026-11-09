@@ -979,3 +979,78 @@ fn escape_stops_a_repeat_and_other_typing_waits() {
     let left = rt.state.edit.text.len();
     assert!(left < before && left > before - 50, "{before} -> {left}");
 }
+
+#[test]
+fn command_n_starts_a_blank_entry_when_everything_is_saved() {
+    let mut s = crate::marked_sample();
+    s.touch();
+    s.file.saved = s.serialized();
+    s.touch();
+    assert!(!s.file.dirty);
+    let mut rt = runtime(s);
+    click(&mut rt, "doc");
+    rt.key(chord("n", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "");
+    assert_eq!(rt.state.doc.text, "");
+    assert!(rt.state.doc.targets.is_empty());
+    assert!(rt.state.file.path.is_none() && !rt.state.file.dirty);
+    press(&mut rt, Key::Text("h".to_string()));
+    assert_eq!(rt.state.edit.text, "h", "the new page takes typing straight away");
+}
+
+#[test]
+fn command_n_warns_once_before_discarding_unsaved_writing() {
+    let mut rt = runtime(State::with_doc(Doc::default()));
+    click(&mut rt, "doc");
+    press(&mut rt, Key::Text("a".to_string()));
+    assert!(rt.state.file.dirty);
+    rt.key(chord("n", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "a", "the first press keeps it");
+    assert!(rt.state.file.notice.as_ref().unwrap().contains("unsaved"));
+    press(&mut rt, Key::Text("b".to_string()));
+    rt.key(chord("n", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "ab", "new writing needs a new warning");
+    rt.key(chord("n", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "");
+    assert!(rt.state.file.notice.is_none());
+    rt.key(cmd("z"));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.edit.text, "", "undo doesn't reach into the old entry");
+    assert_eq!(rt.state.doc.text, "");
+}
+
+#[test]
+fn command_n_clears_panels_reviews_and_the_overflow() {
+    use crate::lab::trim::{Cut, Kind, Level, Review};
+    let mut s = crate::marked_sample();
+    s.set_overflow("spare".to_string());
+    s.edit.set_selection(30, 30);
+    s.open_panel();
+    let text = s.doc.text.clone();
+    s.review = Some(Review::new(Kind::Trim(Level::Slight), vec![Cut { range: 0..3, kept: false, fix: None }], text));
+    s.file.saved = s.serialized();
+    s.touch();
+    let mut rt = runtime(s);
+    settle(&mut rt);
+    rt.key(chord("n", false));
+    settle(&mut rt);
+    assert!(rt.state.panel.is_none());
+    assert!(rt.state.review.is_none());
+    assert_eq!(rt.state.doc.overflow, "");
+    assert_eq!(rt.state.overflow_edit.text, "");
+}
+
+#[test]
+fn command_n_returns_vim_to_insert() {
+    let mut rt = vim_runtime("", 0);
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Normal);
+    rt.key(chord("n", false));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.vim.mode, crate::vim::Mode::Insert);
+    press(&mut rt, Key::Text("h".to_string()));
+    assert_eq!(rt.state.edit.text, "h");
+}

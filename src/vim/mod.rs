@@ -138,6 +138,20 @@ impl Vim {
         }
     }
 
+    /// A new entry: typing works straight away, and marks into the old text are gone.
+    pub fn start_over(&mut self) {
+        self.mode = Mode::Insert;
+        self.visual_anchor = None;
+        self.marks.clear();
+        self.cmdline = None;
+        self.queue.clear();
+        self.expected = None;
+        self.replaying = false;
+        self.change_keys.clear();
+        self.changed = false;
+        self.reset();
+    }
+
     fn reset(&mut self) {
         self.count = 0;
         self.op_count = 0;

@@ -28,6 +28,8 @@ pub struct FileState {
     pub preserved: Option<String>,
     pub dirty: bool,
     pub notice: Option<String>,
+    /// The unsaved document the last ⌘N warned about. Pressing it again on the same writing discards it.
+    pub discard: Option<String>,
 }
 
 pub fn words(text: &str) -> usize {
@@ -84,6 +86,33 @@ impl State {
         self.mode = if self.mode == Mode::Plain { Mode::Active } else { Mode::Plain };
     }
 
+    /// Starts a blank entry. Unsaved writing is never lost on one press: the first warns, and only
+    /// a second press on that same writing discards it.
+    pub fn new_entry(&mut self) {
+        let current = self.serialized();
+        if self.file.dirty && self.file.discard.as_ref() != Some(&current) {
+            self.file.discard = Some(current);
+            self.file.notice = Some("You have unsaved changes. Press \u{2318}S to save, or \u{2318}N again to discard them.".to_string());
+            return;
+        }
+        let doc = Doc::default();
+        self.file = FileState { saved: file::serialize(&doc, None), ..FileState::default() };
+        self.edit = TextEdit::new("");
+        self.edit.focused = true;
+        self.overflow_edit = TextEdit::new("");
+        self.history = Default::default();
+        self.doc = doc;
+        self.panel = None;
+        self.review = None;
+        self.lab = Default::default();
+        self.pending = None;
+        self.menu = None;
+        self.hover = None;
+        self.fade = None;
+        self.bursts.clear();
+        self.vim.start_over();
+    }
+
     pub fn load_file(&mut self, path: &Path, contents: &str) {
         let loaded = file::parse(contents);
         self.edit = TextEdit::new(loaded.doc.text.clone());
@@ -97,6 +126,7 @@ impl State {
             preserved: loaded.preserved,
             dirty: false,
             notice: notice_for(&loaded.problems),
+            discard: None,
         };
     }
 
