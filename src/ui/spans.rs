@@ -11,6 +11,7 @@ pub fn spans(s: &State) -> Vec<Span> {
     if let Some(t) = s.panel.as_ref().and_then(|p| s.doc.targets.iter().find(|t| t.id == p.id)) {
         out.push(Span::new(t.range.start, t.range.end).color(THEME.ink.color()));
     }
+    out.extend(crate::ui::review::spans(s));
     if let Some(fade) = &s.fade {
         out.push(Span::new(fade.range.start, fade.range.end).color(THEME.ink.alpha(fade.alpha(s.fade_now))));
     }
@@ -21,5 +22,6 @@ pub fn highlights(s: &State) -> Vec<TextHighlight> {
     let hovered = s.hover.filter(|_| s.mode == Mode::Active).and_then(|h| s.doc.targets.iter().find(|t| t.id == h.id));
     let mut out: Vec<TextHighlight> = hovered.map(|t| TextHighlight::new(t.range.clone(), THEME.accent.alpha(0.16))).into_iter().collect();
     out.extend(crate::ui::lab::highlights(s));
+    out.extend(crate::ui::review::highlights(s));
     out
 }

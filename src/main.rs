@@ -66,6 +66,7 @@ pub struct State {
     /// Renders the waiting row without a request, for the snapshot scene.
     pub demo_asking: bool,
     pub lab: lab::Lab,
+    pub review: Option<lab::trim::Review>,
     pub lab_hit: RefCell<Vec<Vec<[f32; 4]>>>,
 }
 
@@ -150,6 +151,9 @@ fn page(s: &State, cx: &mut Cx<State>) -> El {
     if let Some(marks) = ui::marks::overlay(s, cx) {
         grown = grown.child(marks);
     }
+    for cut in ui::review::overlays(s, cx) {
+        grown = grown.child(cut);
+    }
     for slot in ui::fx::slots(s) {
         grown = grown.child(slot);
     }
@@ -203,7 +207,8 @@ fn poll(s: &mut State, now: f64, tx: &mut Tx) -> bool {
     let burning = ui::fx::poll(s, now, tx);
     let asking = ai::alternatives::poll(s, now, tx);
     let reading = lab::poll(s, tx);
-    s.track_panel() || fading || burning || asking || reading
+    let trimming = lab::trim::poll(s, tx);
+    s.track_panel() || fading || burning || asking || reading || trimming
 }
 
 fn on_close(s: &mut State, _tx: &mut Tx) {
@@ -236,7 +241,7 @@ fn main() {
     rune::prewarm_gpu();
     let spec = AppSpec::<State> {
         min_size: Some((640.0, 480.0)),
-        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
+        scenes: &[("plain", |s| scene_doc(s, Mode::Plain)), ("active", |s| scene_doc(s, Mode::Active)), ("marks", |s| *s = marked_sample()), ("hover", |s| { *s = marked_sample(); s.hover = Some(swap::Hover { id: 1, armed: true }); }), ("swapped", |s| { *s = marked_sample(); s.step_alt(1, 1); s.fade = None; }), ("sidebar", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); }), ("sidebar-sentence", |s| { *s = marked_sample(); s.edit.set_selection(30, 30); s.open_panel(); s.set_level(model::Level::Sentence); }), ("burst", |s| { *s = marked_sample(); s.bursts.push(ui::fx::Burst { rect: [190.0, 0.0, 70.0, 28.0], started: Some(-0.09) }); }), ("ghost", |s| { *s = marked_sample(); let at = s.doc.text.find("By noon").unwrap(); s.toggle_ghost(at..at + 30); }), ("overflow", |s| { *s = marked_sample(); s.set_overflow("A line about the ferry that didn't fit.\nThe harbor master's dog.".to_string()); s.overflow_open = true; }), ("menu", |s| { *s = marked_sample(); let at = s.doc.text.find("harbor").unwrap(); s.open_menu(Some(at), rune::PointerPress { x: 420.0, y: 170.0 }); }), ("settings", |s| { *s = marked_sample(); s.toggle_settings(); }), ("asking", |s| { *s = marked_sample(); s.edit.set_selection(47, 47); s.open_panel(); s.panel.as_mut().unwrap().rows.last_mut().unwrap().insert("??"); s.dance_now = 0.3; s.demo_asking = true; }), ("lab", |s| { *s = marked_sample(); s.lab.open = true; s.lab.guide = true; }), ("lab-marks", |s| { *s = marked_sample(); s.lab.open = true; for (quote, pass) in [("By noon the fog had gone from the channel", lab::Pass::Weakest), ("as if it had only stopped for a moment", lab::Pass::Long), ("seemed to", lab::Pass::Hedges)] { let at = s.doc.text.find(quote).unwrap(); s.doc.marks.push(model::LabMark { range: at..at + quote.len(), reason: "Example reason".to_string(), pass }); } s.lab.hover = Some(0); }), ("review", |s| { *s = marked_sample(); let text = s.doc.text.clone(); let cuts = ["before the lantern was lit, and ", "as if it had only stopped for a moment", "stopping, and "].iter().map(|q| { let at = text.find(q).unwrap(); lab::trim::Cut { range: at..at + q.len(), kept: false, fix: None } }).collect(); s.review = Some(lab::trim::Review::new(lab::trim::Kind::Trim(lab::trim::Level::More), cuts, text)); }), ("marks-off", |s| { *s = marked_sample(); s.marks_hidden = true; }), ("marks-edited", edited_scene), ("palette", |s| s.scene = Scene::Palette)],
         fonts: fonts::FONTS,
         families: fonts::FAMILIES,
         on_key: Some(editor::handle_key),

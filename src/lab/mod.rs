@@ -1,6 +1,7 @@
 //! The Lab: passes that point at parts of the writing. They mark text; they never rewrite it.
 
 pub mod locate;
+pub mod trim;
 
 use std::time::Duration;
 
@@ -133,6 +134,7 @@ pub struct Lab {
     pub message: Option<String>,
     /// Which mark the pointer is on.
     pub hover: Option<usize>,
+    pub trim: Option<trim::TrimRun>,
 }
 
 impl State {
@@ -153,6 +155,12 @@ impl State {
 
     fn take_findings(&mut self, pass: Pass, value: &Value) {
         let found = marks(&self.doc.text, pass, &findings(value));
+        if pass == Pass::Typos {
+            let cuts: Vec<trim::Cut> = found.into_iter().filter(|(m, fix)| !fix.is_empty() && *fix != self.doc.text[m.range.clone()]).map(|(m, fix)| trim::Cut { range: m.range, kept: false, fix: Some(fix) }).collect();
+            self.lab.message = cuts.is_empty().then(|| "No typos found.".to_string());
+            self.review = (!cuts.is_empty()).then(|| trim::Review::new(trim::Kind::Fixes, cuts, self.doc.text.clone()));
+            return;
+        }
         self.lab.message = found.is_empty().then(|| "Nothing to mark here.".to_string());
         self.doc.marks = found.into_iter().map(|(m, _)| m).collect();
     }
@@ -306,6 +314,21 @@ mod tests {
         feed.send(AiEvent::Failed(crate::ai::AiError::NoNetwork)).unwrap();
         pump(&mut s, |s| s.lab.message.is_some());
         assert!(s.lab.message.as_ref().unwrap().contains("reach"));
+    }
+
+    #[test]
+    fn typos_become_proposed_fixes_and_apply_in_one_step() {
+        let (mut s, feed) = state();
+        s.start_pass(Pass::Typos);
+        finish(&feed, json!({"findings":[{"quote":"Perhaps","occurrence":1,"reason":"","fix":"Maybe"},{"quote":"short","occurrence":1,"reason":"","fix":"short"}]}));
+        pump(&mut s, |s| s.review.is_some());
+        assert!(s.doc.marks.is_empty());
+        assert_eq!(s.review.as_ref().unwrap().cuts.len(), 1, "a fix that changes nothing is dropped");
+        assert_eq!(s.edit.text, TEXT, "nothing changes until accepted");
+        s.make_cuts();
+        assert!(s.edit.text.contains("Maybe a very long"));
+        s.undo();
+        assert_eq!(s.edit.text, TEXT);
     }
 
     #[test]

@@ -58,7 +58,7 @@ impl State {
         let edit = TextEdit::new(doc.text.clone());
         let overflow_edit = TextEdit::new(doc.overflow.clone());
         let saved = file::serialize(&doc, None);
-        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default() }
+        State { edit, doc, file: FileState { saved, ..FileState::default() }, mode: Mode::Plain, marks_hidden: false, scene: Scene::App, hover: None, hit: Default::default(), fade: None, fade_now: 0.0, panel: None, spare_edit: TextEdit::new(""), history: Default::default(), sound: Default::default(), bursts: Vec::new(), menu: None, overflow_open: false, overflow_edit, kit: crate::ui::theme::kit(), ai: Default::default(), provider: crate::ai::settings::Configured::shared(Default::default()), settings_panel: None, pending: None, dance_now: 0.0, demo_asking: false, lab: Default::default(), lab_hit: Default::default(), review: None }
     }
 
     /// Takes in the field after a change.

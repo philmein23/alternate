@@ -8,7 +8,7 @@ use crate::State;
 use crate::editor::Mode;
 
 /// Taking a word from the middle of a line shouldn't leave two spaces where it was.
-fn tidy(text: &str, range: Range<usize>) -> Range<usize> {
+pub fn tidy(text: &str, range: Range<usize>) -> Range<usize> {
     let before = text[..range.start].chars().next_back();
     let after = text[range.end..].chars().next();
     let closes = after.is_none_or(|c| c == ' ' || c == '\n' || c.is_ascii_punctuation());

@@ -403,3 +403,29 @@ fn the_menu_asks_for_alternatives_on_the_word_under_the_pointer() {
     assert_eq!(rt.state.pending.as_ref().unwrap().id, 1);
     assert_eq!(rt.state.panel.as_ref().unwrap().rows.last().unwrap().text, "??");
 }
+
+#[test]
+fn the_bottom_controls_still_work_under_the_lab_dock() {
+    let mut rt = runtime(crate::marked_sample());
+    click(&mut rt, "toggle-overflow");
+    assert!(rt.state.overflow_open);
+    click(&mut rt, "toggle-lab");
+    assert!(rt.state.lab.open);
+}
+
+#[test]
+fn clicking_a_faded_run_keeps_it_and_the_bar_makes_the_cuts() {
+    use crate::lab::trim::{Cut, Kind, Level, Review};
+    let mut s = crate::marked_sample();
+    let text = s.doc.text.clone();
+    let cut = |q: &str| { let at = text.find(q).unwrap(); Cut { range: at..at + q.len(), kept: false, fix: None } };
+    s.review = Some(Review::new(Kind::Trim(Level::Slight), vec![cut("nobody on the"), cut("along the quay")], text.clone()));
+    let mut rt = runtime(s);
+    click(&mut rt, "cut-0");
+    assert!(rt.state.review.as_ref().unwrap().cuts[0].kept);
+    click(&mut rt, "review-apply");
+    assert!(rt.state.review.is_none());
+    assert!(rt.state.edit.text.contains("nobody on the"));
+    assert!(!rt.state.edit.text.contains("along the quay"));
+    assert_eq!(rt.state.edit.text, rt.state.doc.text);
+}

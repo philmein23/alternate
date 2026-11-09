@@ -4,6 +4,7 @@ pub mod lab;
 pub mod marks;
 pub mod menu;
 pub mod overflow;
+pub mod review;
 pub mod settings;
 pub mod palette_scene;
 pub mod sidebar;
